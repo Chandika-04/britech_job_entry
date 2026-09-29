@@ -1,11 +1,6 @@
-"""Placeholder ERP boundary for Phase 2. Must not write to ShopKeeper."""
+"""ShopKeeper ERP boundary. SQL lives in the ShopKeeper service only."""
 
+from app.services.shopkeeper.provider import ShopKeeperProvider, get_shopkeeper_provider
+from app.services.shopkeeper.writer import create_job_for_line
 
-class ERPIntegrationService:
-    def create_job(self, *args, **kwargs) -> None:
-        raise NotImplementedError(
-            "ShopKeeper integration is Phase 2 and is not implemented."
-        )
-
-
-erp_integration_service = ERPIntegrationService()
+__all__ = ["ShopKeeperProvider", "create_job_for_line", "get_shopkeeper_provider"]

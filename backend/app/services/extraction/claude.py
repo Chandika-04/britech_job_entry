@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from app.config import get_settings
 from app.schemas.extraction import ExtractionResult, ProviderResult
 from app.services.extraction.prompt import SYSTEM_PROMPT
-from app.services.pdf.processor import ProcessedPdf
+from app.services.pdf.processor import ProcessedPdf, image_media_type
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,7 @@ class ClaudeExtractionProvider:
                     "type": "image",
                     "source": {
                         "type": "base64",
-                        "media_type": "image/png",
+                        "media_type": image_media_type(image),
                         "data": base64.b64encode(image).decode("ascii"),
                     },
                 }

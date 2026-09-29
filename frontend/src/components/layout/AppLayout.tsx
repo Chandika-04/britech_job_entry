@@ -1,35 +1,49 @@
-import { FileUp, ClipboardList } from "lucide-react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { FileUp } from "lucide-react";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
 
-const navClass = ({ isActive }: { isActive: boolean }) =>
+const tabClass = ({ isActive }: { isActive: boolean }) =>
   cn(
-    "inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold",
-    isActive ? "bg-slate-800 text-white" : "text-slate-300 hover:bg-slate-800/70 hover:text-white",
+    "-mb-px inline-flex h-10 items-center border-b-2 px-3 text-[13px] font-semibold transition-colors",
+    isActive ? "border-accent text-accent" : "border-transparent text-muted hover:text-ink",
   );
 
 export function AppLayout() {
+  const { pathname } = useLocation();
   return (
-    <div className="min-h-dvh bg-slate-100 text-slate-900">
-      <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950 text-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3">
-          <Link to="/" className="min-h-11 font-semibold tracking-tight">
-            PO Extraction
-          </Link>
-          <nav className="flex items-center gap-1">
-            <NavLink to="/" className={navClass} end>
-              <ClipboardList className="h-4 w-4" />
-              Dashboard
+    <div className="min-h-dvh bg-page text-ink">
+      <header className="sticky top-0 z-20">
+        <div className="eng-grid border-b-2 border-accent">
+          <div className="mx-auto grid w-[94vw] max-w-[1520px] grid-cols-[1fr_auto_1fr] items-center gap-3 py-2.5">
+            <Link to="/" className="flex flex-col leading-tight">
+              <span className="text-[15px] font-bold tracking-[0.04em] text-accent">BRITECH</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Electropolishing</span>
+            </Link>
+            <div className="text-center text-[13px] font-semibold uppercase tracking-[0.18em] text-ink">Job Entry</div>
+            <div className="flex justify-end">
+              <Link
+                to="/upload"
+                className="inline-flex h-8 items-center gap-1.5 rounded-[7px] border border-rule bg-white px-3 text-[13px] font-semibold text-ink hover:border-accent/50 hover:text-accent"
+              >
+                <FileUp className="h-4 w-4" />
+                <span className="hidden sm:inline">Upload PO</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+        <nav className="border-b border-rule bg-white">
+          <div className="mx-auto flex w-[94vw] max-w-[1520px] gap-1">
+            <NavLink to="/" className={({ isActive }) => tabClass({ isActive: isActive || pathname.startsWith("/po/") })} end>
+              Purchase Orders
             </NavLink>
-            <NavLink to="/upload" className={navClass}>
-              <FileUp className="h-4 w-4" />
+            <NavLink to="/upload" className={tabClass}>
               Upload
             </NavLink>
-          </nav>
-        </div>
+          </div>
+        </nav>
       </header>
-      <main className="mx-auto w-full max-w-7xl px-4 py-4 pb-24 md:pb-8">
+      <main className="mx-auto w-[94vw] max-w-[1520px] py-4 pb-8">
         <Outlet />
       </main>
     </div>

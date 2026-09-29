@@ -1,8 +1,8 @@
 # PO Extraction
 
-Phase 1 manufacturing purchase-order extraction and human review.
+Manufacturing purchase-order extraction, human review, and ShopKeeper job creation (steps 1–6).
 
-The application accepts a scanned or digital PO PDF, extracts structured job information with Claude vision, and lets a reviewer correct and confirm the result. It does **not** write anything to ShopKeeper.
+The application accepts a scanned or digital PO PDF, extracts structured job information with Claude vision, and lets a reviewer correct and confirm the result. After confirmation, the reviewer matches an existing ShopKeeper customer and part, then creates one job per PO line. It never creates customers or parts, and it never edits or deletes jobs after they are written.
 
 ## Local setup
 
@@ -58,7 +58,7 @@ cd backend
 pytest
 ```
 
-Automated tests use `FakeExtractionProvider` and do not call Anthropic.
+Automated tests use `FakeExtractionProvider` and `FakeShopKeeper`. They do not call Anthropic or SQL Server.
 
 ## Workflow
 
@@ -68,8 +68,10 @@ Automated tests use `FakeExtractionProvider` and do not call Anthropic.
 4. Review the original PDF next to the extracted fields.
 5. Edit anything that is wrong.
 6. Save draft or Confirm reviewed.
-7. If a confirmed PO is edited later, it returns to **unreviewed**.
-8. Re-extract always uses the original stored PDF, keeps previous `llm_call` history, and resets review state to **unreviewed**.
+7. Search ShopKeeper for the bill-to/both customer and the exact part + revision. The reviewer must pick the match.
+8. Create one ShopKeeper job per line (or skip the line). A person then finishes routing and shipping in ShopKeeper.
+9. If a confirmed PO is edited later, it returns to **unreviewed**.
+10. Re-extract always uses the original stored PDF, keeps previous `llm_call` history, and resets review state to **unreviewed**.
 
 ## Environment
 
@@ -84,6 +86,11 @@ See `.env.example`. Important variables:
 | `MAX_PDF_PAGES` | Upload page limit |
 | `HEARTBEAT_STALE_SECONDS` | Stale extraction recovery threshold |
 | `EXTRACTION_PROVIDER` | `claude` or `fake` |
+| `SHOPKEEPER_PROVIDER` | `shopkeeper` or `fake` |
+| `SHOPKEEPER_CONNECTION_STRING` | pyodbc ODBC Driver 18 connection string |
+| `SHOPKEEPER_EXPECTED_DATABASE` | Must match `DB_NAME()` or writes are refused |
+| `SHOPKEEPER_NON_TAX_CODE` | Used when the customer has no tax code |
+| `SHOPKEEPER_NEW_JOB_STATUS` | Written to `Jb_Status` (currently `NA`) |
 | `CORS_ORIGINS` | Comma-separated frontend origins |
 | `VITE_API_BASE_URL` | Frontend API base URL at build time |
 
@@ -107,8 +114,13 @@ Set these in the Render dashboard:
 - PDFs are stored in PostgreSQL (`bytea`) behind a storage interface.
 - Claude access is isolated behind `ExtractionProvider` / `ClaudeExtractionProvider`.
 - `FakeExtractionProvider` is used in tests.
-- `ERPIntegrationService` is a Phase 2 placeholder and does not connect to ShopKeeper.
+- ShopKeeper access is isolated behind `ShopKeeperProvider`. Tests and local UI work use `FakeShopKeeper`.
+- Live writes use pyodbc against SQL Server and stop if `DB_NAME()` does not match `SHOPKEEPER_EXPECTED_DATABASE`.
 
-## Phase 2 note
+## Phase 2
 
-ShopKeeper / SQL Server job creation is intentionally not implemented. Reference notes remain in `Project_Instructions.md`.
+See `Phase2_Instructions.md` for the write sequence, idempotency rules, and open production questions (`Jb_Status`, non-tax code, and the production SQL login). For UI/backend testing without SQL Server, set:
+
+```text
+SHOPKEEPER_PROVIDER=fake
+```

@@ -44,8 +44,8 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="PO Extraction",
-        description="Phase 1 manufacturing purchase-order extraction and human review.",
-        version="0.1.0",
+        description="Manufacturing purchase-order extraction, review, and ShopKeeper job creation.",
+        version="0.2.0",
         lifespan=lifespan,
     )
     origins = settings.cors_origin_list

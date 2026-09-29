@@ -2,6 +2,7 @@
 .env
 .env.local
 *.pem
+references/job_write_test
 
 # Python
 __pycache__/

@@ -92,12 +92,53 @@ def render_page_png(doc: fitz.Document, page_number: int, dpi: int | None = None
     return pix.tobytes("png")
 
 
+# Anthropic rejects images over 10 MB; base64 adds a third, so keep raw bytes well below that.
+MODEL_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+
+
+def render_page_for_model(
+    doc: fitz.Document,
+    page_number: int,
+    dpi: int | None = None,
+    max_bytes: int = MODEL_IMAGE_MAX_BYTES,
+) -> bytes:
+    png = render_page_png(doc, page_number, dpi)
+    if len(png) <= max_bytes:
+        return png
+
+    page = doc.load_page(page_number - 1)
+    base_zoom = (dpi or get_settings().pdf_render_dpi) / 72
+    rect = page.rect
+    max_edge = 4000
+    base_zoom = min(base_zoom, max_edge / rect.width, max_edge / rect.height)
+    image = png
+    for scale in (1.0, 0.85, 0.7, 0.55, 0.4):
+        pix = page.get_pixmap(matrix=fitz.Matrix(base_zoom * scale, base_zoom * scale), alpha=False)
+        for quality in (85, 70):
+            image = pix.tobytes("jpeg", jpg_quality=quality)
+            if len(image) <= max_bytes:
+                logger.info(
+                    "Page %s image reduced for model: png=%s bytes -> jpeg=%s bytes (scale=%s, quality=%s)",
+                    page_number, len(png), len(image), scale, quality,
+                )
+                return image
+    logger.warning("Page %s image still %s bytes after reduction", page_number, len(image))
+    return image
+
+
+def image_media_type(image: bytes) -> str:
+    return "image/jpeg" if image[:3] == b"\xff\xd8\xff" else "image/png"
+
+
 def process_pdf(data: bytes, settings: Settings | None = None) -> ProcessedPdf:
     settings = settings or get_settings()
     validate_pdf(data, settings)
     doc = open_pdf(data)
     try:
-        images = [render_page_png(doc, page_number, settings.pdf_render_dpi) for page_number in range(1, doc.page_count + 1)]
+        images = [
+            render_page_for_model(doc, page_number, settings.pdf_render_dpi)
+            for page_number in range(1, doc.page_count + 1)
+        ]
         return ProcessedPdf(
             page_count=doc.page_count,
             embedded_text=extract_embedded_text(doc),

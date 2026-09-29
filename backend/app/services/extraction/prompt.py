@@ -4,6 +4,11 @@ The input may include rendered page images and, when available, embedded PDF tex
 Scanned POs may have little or no embedded text. Use the images as the primary source.
 Use embedded text as supporting evidence when it is present.
 
+Britech Electropolishing (any spelling, e.g. "Britech Electropolishing, Inc.", "BRITECH", or a garbled scan of it)
+is always the vendor/supplier receiving this PO, never the customer. The customer is the company that issued the PO
+(usually the letterhead, "Bill To", or buyer). Never put Britech in customer_name, bill_to, or customer_number,
+and never use a vendor/supplier number assigned to Britech as customer_number.
+
 Never invent information. If a value is missing, unreadable, or genuinely ambiguous, return null.
 Do not guess part numbers, quantities, prices, or dates.
 

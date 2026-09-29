@@ -5,21 +5,21 @@ import type { ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:pointer-events-none disabled:opacity-50 min-h-12 px-4",
+  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-[7px] text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:pointer-events-none disabled:opacity-45",
   {
     variants: {
       variant: {
-        default: "bg-sky-600 text-white hover:bg-sky-500",
-        secondary: "bg-slate-800 text-white hover:bg-slate-700",
-        outline: "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
-        ghost: "text-slate-700 hover:bg-slate-100",
-        danger: "bg-red-600 text-white hover:bg-red-500",
+        default: "bg-accent text-white hover:bg-accent-hover",
+        secondary: "border border-rule bg-head text-ink hover:bg-rule-soft",
+        outline: "border border-rule bg-white text-ink hover:border-accent/50 hover:text-accent",
+        ghost: "text-muted hover:bg-rule-soft hover:text-ink",
+        danger: "border border-red-300 bg-white text-red-700 hover:bg-red-50",
       },
       size: {
-        default: "min-h-12",
-        lg: "min-h-14 px-5 text-base",
-        sm: "min-h-10 px-3 text-sm",
-        icon: "h-12 w-12 p-0",
+        default: "h-10 px-3.5 md:h-8",
+        lg: "h-11 px-4 text-sm md:h-9",
+        sm: "h-9 px-2.5 text-xs md:h-7",
+        icon: "h-10 w-10 p-0 md:h-8 md:w-8",
       },
     },
     defaultVariants: {

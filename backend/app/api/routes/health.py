@@ -15,6 +15,8 @@ def health(db: Session = Depends(get_db)) -> dict:
     return {
         "status": "ok",
         "extraction_provider": settings.extraction_provider,
+        "shopkeeper_provider": settings.shopkeeper_provider,
+        "shopkeeper_expected_database": settings.shopkeeper_expected_database,
         "anthropic_configured": bool(settings.anthropic_api_key),
         "anthropic_model": settings.anthropic_model,
     }

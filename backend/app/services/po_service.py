@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.config import Settings, get_settings
 from app.models.po_line_item import PoLineItem
@@ -60,6 +60,8 @@ def is_stale(po: PoRequest, settings: Settings | None = None) -> bool:
 
 def to_summary(po: PoRequest, settings: Settings | None = None) -> PoSummary:
     warnings = _as_warnings(po.warnings)
+    line_count = len(po.line_items)
+    jobs_created_count = sum(1 for line in po.line_items if line.erp_status == "created")
     return PoSummary(
         id=po.id,
         created_at=po.created_at,
@@ -75,6 +77,9 @@ def to_summary(po: PoRequest, settings: Settings | None = None) -> PoSummary:
             item.code in {"duplicate_po", "duplicate_po_confirmed"} for item in warnings
         ),
         page_count=po.attachment.page_count if po.attachment else None,
+        line_count=line_count,
+        jobs_created_count=jobs_created_count,
+        jobs_complete=line_count > 0 and jobs_created_count == line_count,
     )
 
 
@@ -175,7 +180,12 @@ def list_pos(
     total = query.count()
     page = max(page, 1)
     page_size = min(max(page_size, 1), 100)
-    items = query.offset((page - 1) * page_size).limit(page_size).all()
+    items = (
+        query.options(selectinload(PoRequest.line_items), selectinload(PoRequest.attachment))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
     return items, total
 
 
@@ -264,6 +274,9 @@ def apply_update(db: Session, po: PoRequest, payload: PoUpdate) -> bool:
 
 def save_draft(db: Session, po: PoRequest, payload: PoUpdate) -> PoRequest:
     apply_update(db, po, payload)
+    from app.services.shopkeeper.writer import refresh_po_erp_status
+
+    refresh_po_erp_status(po)
     db.add(po)
     db.commit()
     db.refresh(po)
@@ -276,6 +289,9 @@ def confirm_reviewed(db: Session, po: PoRequest, payload: PoUpdate | None = None
     if po.status != PoStatus.extracted:
         raise ConflictError("This purchase order cannot be confirmed until extraction has completed.")
     po.review_state = ReviewState.confirmed
+    from app.services.shopkeeper.writer import refresh_po_erp_status
+
+    refresh_po_erp_status(po)
     db.add(po)
     db.commit()
     db.refresh(po)

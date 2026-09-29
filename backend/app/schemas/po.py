@@ -1,11 +1,20 @@
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from app.models.po_request import PoStatus, ReviewState
 from app.schemas.extraction import WarningItem
+
+
+def _assume_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value
+
+
+# SQLite drops tzinfo on read; every timestamp the app stores is UTC.
+UtcDatetime = Annotated[datetime, AfterValidator(_assume_utc)]
 
 
 class LineItemIn(BaseModel):
@@ -35,6 +44,19 @@ class LineItemOut(BaseModel):
     due_date: date | None = None
     notes: str | None = None
     reviewer_edited: bool = False
+    resolved_customer_code: str | None = None
+    resolved_part_number: str | None = None
+    resolved_part_revision: str | None = None
+    resolved_pm_linkid: int | None = None
+    customer_credit_hold: bool = False
+    credit_hold_acknowledged: bool = False
+    duplicate_job_numbers: list[str] = Field(default_factory=list)
+    duplicate_acknowledged: bool = False
+    erp_status: str = "pending"
+    erp_job_number: str | None = None
+    erp_created_at: UtcDatetime | None = None
+    erp_failure_reason: str | None = None
+    erp_database: str | None = None
 
 
 class PoUpdate(BaseModel):
@@ -64,15 +86,15 @@ class LlmCallOut(BaseModel):
     input_tokens: int | None = None
     output_tokens: int | None = None
     cost_usd: Decimal | None = None
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 class PoSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
+    created_at: UtcDatetime
+    updated_at: UtcDatetime
     status: PoStatus
     review_state: ReviewState
     po_number: str | None = None
@@ -82,10 +104,13 @@ class PoSummary(BaseModel):
     is_stale: bool = False
     has_duplicate_warning: bool = False
     page_count: int | None = None
+    line_count: int = 0
+    jobs_created_count: int = 0
+    jobs_complete: bool = False
 
 
 class PoDetail(PoSummary):
-    heartbeat_at: datetime | None = None
+    heartbeat_at: UtcDatetime | None = None
     order_date: date | None = None
     requested_ship_date: date | None = None
     buyer_contact: str | None = None

@@ -1,4 +1,11 @@
-import type { PoDetail, PoDraft, PoListResponse } from "@/types/po";
+import type {
+  CustomerLookupResponse,
+  CustomerSuggestion,
+  PartLookupResponse,
+  PoDetail,
+  PoDraft,
+  PoListResponse,
+} from "@/types/po";
 import { emptyToNull } from "@/lib/utils";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -104,5 +111,65 @@ export const api = {
   },
   pageUrl(id: string, page: number) {
     return `${API_BASE}/api/po/${id}/attachment/page/${page}`;
+  },
+  lookupCustomers(query: string) {
+    const params = new URLSearchParams({ q: query });
+    return request<CustomerLookupResponse>(`/api/shopkeeper/customers?${params.toString()}`);
+  },
+  suggestCustomer(poId: string) {
+    return request<CustomerSuggestion>(`/api/po/${poId}/customer-suggestion`);
+  },
+  lookupParts(partNumber: string, partRevision?: string) {
+    const params = new URLSearchParams({ part_number: partNumber });
+    if (partRevision) params.set("part_revision", partRevision);
+    return request<PartLookupResponse>(`/api/shopkeeper/parts?${params.toString()}`);
+  },
+  resolveCustomer(poId: string, lineId: string, customerNumber: string, applyToAllLines = true) {
+    return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/resolve-customer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customer_number: customerNumber, apply_to_all_lines: applyToAllLines }),
+    });
+  },
+  resolvePart(poId: string, lineId: string, partNumber: string, partRevision: string) {
+    return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/resolve-part`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ part_number: partNumber, part_revision: partRevision }),
+    });
+  },
+  acknowledgeCreditHold(poId: string, lineId: string) {
+    return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/acknowledge-credit-hold`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ acknowledge: true }),
+    });
+  },
+  acknowledgeDuplicate(poId: string, lineId: string) {
+    return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/acknowledge-duplicate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ acknowledge: true }),
+    });
+  },
+  skipLine(poId: string, lineId: string, reason?: string) {
+    return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/skip`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: reason || "Reviewer skipped ShopKeeper job creation." }),
+    });
+  },
+  createJob(poId: string, lineId: string) {
+    return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/create-job`, { method: "POST" });
+  },
+  unskipLine(poId: string, lineId: string) {
+    return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/unskip`, { method: "POST" });
+  },
+  resetErp(poId: string, lineId: string, reason?: string) {
+    return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/reset-erp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: reason || "Admin reset after ShopKeeper job was deleted." }),
+    });
   },
 };

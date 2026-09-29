@@ -1,6 +1,7 @@
 export type PoStatus = "pending" | "extracted" | "failed";
 export type ReviewState = "unreviewed" | "confirmed";
 export type WarningSeverity = "info" | "warning" | "prominent";
+export type ErpStatus = "pending" | "ready" | "creating" | "created" | "failed" | "skipped";
 
 export interface WarningItem {
   code: string;
@@ -20,6 +21,19 @@ export interface LineItem {
   due_date: string | null;
   notes: string | null;
   reviewer_edited: boolean;
+  resolved_customer_code: string | null;
+  resolved_part_number: string | null;
+  resolved_part_revision: string | null;
+  resolved_pm_linkid: number | null;
+  customer_credit_hold: boolean;
+  credit_hold_acknowledged: boolean;
+  duplicate_job_numbers: string[];
+  duplicate_acknowledged: boolean;
+  erp_status: ErpStatus;
+  erp_job_number: string | null;
+  erp_created_at: string | null;
+  erp_failure_reason: string | null;
+  erp_database: string | null;
 }
 
 export interface LlmCall {
@@ -45,6 +59,9 @@ export interface PoSummary {
   is_stale: boolean;
   has_duplicate_warning: boolean;
   page_count: number | null;
+  line_count: number;
+  jobs_created_count: number;
+  jobs_complete: boolean;
 }
 
 export interface PoDetail extends PoSummary {
@@ -92,4 +109,52 @@ export interface PoDraft {
   bill_to: string;
   ship_to: string;
   line_items: LineItemDraft[];
+}
+
+export interface CustomerCandidate {
+  customer_number: string;
+  company: string | null;
+  record_type: string | null;
+  bill_to_customer_number: string | null;
+  active: boolean;
+  credit_hold: boolean;
+  payment_terms: string | null;
+  shipped_via: string | null;
+  salesman: string | null;
+  cert_default: boolean;
+  taxable_default: boolean;
+  tax_code: string | null;
+}
+
+export interface PartCandidate {
+  part_number: string;
+  part_revision: string;
+  description: string | null;
+  master_type: string | null;
+  pm_linkid: number;
+  inactive: boolean;
+}
+
+export interface CustomerLookupResponse {
+  query: string;
+  matches: CustomerCandidate[];
+  exact_one: boolean;
+}
+
+export type CustomerMatchStatus = "alias" | "exact" | "contains" | "ambiguous" | "candidates" | "none";
+
+export interface CustomerSuggestion {
+  extracted_name: string | null;
+  normalized_name: string;
+  status: CustomerMatchStatus;
+  customer: CustomerCandidate | null;
+  candidates: CustomerCandidate[];
+  warning: string | null;
+}
+
+export interface PartLookupResponse {
+  part_number: string;
+  part_revision: string | null;
+  matches: PartCandidate[];
+  exact_one: boolean;
 }

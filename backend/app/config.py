@@ -25,9 +25,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://po:po@localhost:5432/po_extraction"
 
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-5"
-    anthropic_input_cost_per_million: float = 2.00
-    anthropic_output_cost_per_million: float = 10.00
+    anthropic_model: str = "claude-haiku-4-5-20251001"
+    anthropic_input_cost_per_million: float = 1.00
+    anthropic_output_cost_per_million: float = 5.00
 
     extraction_provider: str = "claude"
 
@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     max_extraction_retries: int = 5
+
+    shopkeeper_provider: str = "shopkeeper"
+    shopkeeper_connection_string: str = ""
+    shopkeeper_expected_database: str = "SkData_Test"
+    shopkeeper_non_tax_code: str = "NT"
+    shopkeeper_new_job_status: str = "NA"
+    shopkeeper_job_reserve_retries: int = 5
+    app_version: str = "0.2.0"
 
     @property
     def sqlalchemy_database_url(self) -> str:

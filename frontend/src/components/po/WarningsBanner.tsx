@@ -9,20 +9,17 @@ export function WarningsBanner({ warnings }: { warnings: WarningItem[] }) {
   return (
     <div
       className={cn(
-        "rounded-2xl border p-4",
-        prominent ? "border-amber-400 bg-amber-50" : "border-amber-200 bg-amber-50/70",
+        "rounded-lg border border-l-4 bg-amber-50 px-3 py-2 text-[13px] text-amber-950",
+        prominent ? "border-amber-300 border-l-amber-500" : "border-amber-200 border-l-amber-400",
       )}
     >
-      <div className="mb-2 flex items-center gap-2 font-semibold text-amber-950">
-        <AlertTriangle className="h-5 w-5" />
-        Review warnings
+      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-amber-800">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        Review warnings · {warnings.length}
       </div>
-      <ul className="space-y-2 text-sm text-amber-950">
+      <ul className="mt-1 space-y-0.5">
         {warnings.map((warning, index) => (
-          <li
-            key={`${warning.code}-${index}`}
-            className={cn(warning.severity === "prominent" && "rounded-lg bg-amber-200/80 px-3 py-2 font-medium")}
-          >
+          <li key={`${warning.code}-${index}`} className={cn(warning.severity === "prominent" && "font-semibold")}>
             {warning.message}
           </li>
         ))}
