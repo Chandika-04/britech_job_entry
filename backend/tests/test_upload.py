@@ -90,3 +90,34 @@ def test_list_search_sort_pagination(client, db):
     body = listed.json()
     assert body["total"] == 2
     assert [item["po_number"] for item in body["items"]] == ["PO-0", "PO-1"]
+    for item in body["items"]:
+        assert item["created_at"].endswith(("Z", "+00:00"))
+
+
+def test_list_reports_job_completion(client, db):
+    from app.models.po_line_item import PoLineItem
+    from app.models.po_request import PoRequest, PoStatus, ReviewState
+
+    def add_po(number: str, statuses: list[str]) -> None:
+        po = PoRequest(
+            po_number=number,
+            status=PoStatus.extracted,
+            review_state=ReviewState.confirmed,
+            warnings=[],
+        )
+        po.line_items = [PoLineItem(line_number=index + 1, erp_status=status) for index, status in enumerate(statuses)]
+        db.add(po)
+
+    add_po("DONE", ["created", "created"])
+    add_po("PARTIAL", ["created", "ready"])
+    add_po("SKIPPED", ["created", "skipped"])
+    add_po("EMPTY", [])
+    db.commit()
+
+    items = {item["po_number"]: item for item in client.get("/api/po").json()["items"]}
+    assert items["DONE"]["jobs_complete"] is True
+    assert (items["DONE"]["jobs_created_count"], items["DONE"]["line_count"]) == (2, 2)
+    assert items["PARTIAL"]["jobs_complete"] is False
+    assert items["PARTIAL"]["jobs_created_count"] == 1
+    assert items["SKIPPED"]["jobs_complete"] is False
+    assert items["EMPTY"]["jobs_complete"] is False

@@ -1,5 +1,26 @@
-from app.services.pdf.processor import extract_embedded_text, open_pdf, process_pdf, render_page_png, validate_pdf
+from app.services.pdf.processor import (
+    extract_embedded_text,
+    image_media_type,
+    open_pdf,
+    process_pdf,
+    render_page_for_model,
+    render_page_png,
+    validate_pdf,
+)
 from tests.helpers import make_scanned_pdf, make_text_pdf
+
+
+def test_model_image_shrinks_when_png_too_large(settings):
+    doc = open_pdf(make_scanned_pdf("Large scan"))
+    try:
+        png = render_page_png(doc, 1, settings.pdf_render_dpi)
+        limit = len(png) // 2
+        image = render_page_for_model(doc, 1, settings.pdf_render_dpi, max_bytes=limit)
+        assert len(image) <= limit
+        assert image_media_type(image) == "image/jpeg"
+        assert image_media_type(png) == "image/png"
+    finally:
+        doc.close()
 
 
 def test_page_count_and_text(settings):

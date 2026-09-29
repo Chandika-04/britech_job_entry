@@ -15,11 +15,13 @@ os.environ.setdefault("MAX_UPLOAD_SIZE_MB", "5")
 os.environ.setdefault("MAX_PDF_PAGES", "5")
 os.environ.setdefault("ANTHROPIC_API_KEY", "")
 os.environ.setdefault("DATABASE_URL", "sqlite://")
+os.environ.setdefault("SHOPKEEPER_PROVIDER", "fake")
+os.environ.setdefault("SHOPKEEPER_EXPECTED_DATABASE", "SkData_Test")
 
 from app.config import get_settings  # noqa: E402
 from app.database.base import Base  # noqa: E402
 from app.database.session import get_engine, get_session_factory, reset_engine  # noqa: E402
-from app.models import LlmCall, PoAttachment, PoLineItem, PoRequest  # noqa: F401, E402
+from app.models import ErpWriteAudit, LlmCall, PoAttachment, PoLineItem, PoRequest  # noqa: F401, E402
 
 
 @pytest.fixture
@@ -30,8 +32,13 @@ def settings(tmp_path, monkeypatch):
     monkeypatch.setenv("EXTRACTION_PROVIDER", "fake")
     monkeypatch.setenv("SKIP_MIGRATIONS", "true")
     monkeypatch.setenv("HEARTBEAT_STALE_SECONDS", "30")
+    monkeypatch.setenv("SHOPKEEPER_PROVIDER", "fake")
+    monkeypatch.setenv("SHOPKEEPER_EXPECTED_DATABASE", "SkData_Test")
     get_settings.cache_clear()
     reset_engine()
+    from app.services.shopkeeper.fake import FakeShopKeeper
+
+    FakeShopKeeper.reset_shared()
     engine = get_engine()
     Base.metadata.create_all(engine)
     yield get_settings()
