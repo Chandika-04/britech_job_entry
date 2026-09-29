@@ -8,13 +8,15 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import Settings, get_settings
+from app.models.erp_write_audit import ErpWriteAudit
 from app.models.po_line_item import PoLineItem
 from app.models.po_request import PoRequest, PoStatus, ReviewState
 from app.schemas.extraction import WarningItem
 from app.schemas.po import LineItemIn, PoDetail, PoSummary, PoUpdate
-from app.services.extraction.warnings import duplicate_warnings
+from app.services.extraction.warnings import DUPLICATE_CODES, refresh_duplicate_warnings
 from app.services.pdf.processor import sanitize_filename, validate_pdf
 from app.services.storage.pdf_storage import pdf_storage
+from app.services.units import normalize_unit
 from app.exceptions import ConflictError, NotFoundError
 
 logger = logging.getLogger(__name__)
@@ -22,7 +24,6 @@ logger = logging.getLogger(__name__)
 HEADER_FIELDS = (
     "po_number",
     "customer_name",
-    "customer_number",
     "order_date",
     "requested_ship_date",
     "buyer_contact",
@@ -70,11 +71,10 @@ def to_summary(po: PoRequest, settings: Settings | None = None) -> PoSummary:
         review_state=po.review_state,
         po_number=po.po_number,
         customer_name=po.customer_name,
-        customer_number=po.customer_number,
         warnings=warnings,
         is_stale=is_stale(po, settings),
         has_duplicate_warning=any(
-            item.code in {"duplicate_po", "duplicate_po_confirmed"} for item in warnings
+            item.code in DUPLICATE_CODES for item in warnings
         ),
         page_count=po.attachment.page_count if po.attachment else None,
         line_count=line_count,
@@ -117,7 +117,7 @@ def create_from_upload(
     )
     db.add(po)
     db.flush()
-    pdf_storage.save(
+    attachment = pdf_storage.save(
         db,
         po_request_id=po.id,
         filename=sanitize_filename(filename),
@@ -125,7 +125,12 @@ def create_from_upload(
         pdf_bytes=pdf_bytes,
         page_count=page_count,
     )
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        pdf_storage.delete_files(attachment.storage_path)
+        raise
     db.refresh(po)
     return po
 
@@ -155,7 +160,6 @@ def list_pos(
             or_(
                 PoRequest.po_number.ilike(like),
                 PoRequest.customer_name.ilike(like),
-                PoRequest.customer_number.ilike(like),
             )
         )
     if status:
@@ -208,6 +212,8 @@ def _line_item_changed(existing: PoLineItem | None, incoming: LineItemIn) -> boo
 def apply_update(db: Session, po: PoRequest, payload: PoUpdate) -> bool:
     """Apply reviewer edits. Returns True if stored data changed."""
     changed = False
+    for incoming in payload.line_items:
+        incoming.uom = normalize_unit(incoming.uom)
     for field in HEADER_FIELDS:
         new_value = getattr(payload, field)
         if getattr(po, field) != new_value:
@@ -218,6 +224,9 @@ def apply_update(db: Session, po: PoRequest, payload: PoUpdate) -> bool:
     incoming_ids = {item.id for item in payload.line_items if item.id}
     for item in list(po.line_items):
         if item.id not in incoming_ids:
+            db.query(ErpWriteAudit).filter(ErpWriteAudit.line_item_id == item.id).update(
+                {ErpWriteAudit.line_item_id: None}, synchronize_session=False
+            )
             po.line_items.remove(item)
             changed = True
 
@@ -254,19 +263,7 @@ def apply_update(db: Session, po: PoRequest, payload: PoUpdate) -> bool:
             changed = True
 
     if changed:
-        extra = duplicate_warnings(
-            db,
-            customer_number=po.customer_number,
-            po_number=po.po_number,
-            exclude_id=po.id,
-        )
-        current = [
-            item
-            for item in _as_warnings(po.warnings)
-            if item.code not in {"duplicate_po", "duplicate_po_confirmed"}
-        ]
-        current.extend(extra)
-        po.warnings = [item.model_dump() for item in current]
+        refresh_duplicate_warnings(db, po)
         if po.review_state == ReviewState.confirmed:
             po.review_state = ReviewState.unreviewed
     return changed
@@ -312,8 +309,12 @@ def queue_reextract(db: Session, po: PoRequest) -> PoRequest:
 
 
 def delete_po(db: Session, po: PoRequest) -> None:
+    storage_path = po.attachment.storage_path if po.attachment else None
+    db.query(ErpWriteAudit).filter(ErpWriteAudit.po_id == po.id).delete(synchronize_session=False)
     db.delete(po)
     db.commit()
+    if storage_path:
+        pdf_storage.delete_files(storage_path)
 
 
 def claim_pending_job(db: Session, settings: Settings | None = None) -> UUID | None:
@@ -327,7 +328,7 @@ def claim_pending_job(db: Session, settings: Settings | None = None) -> UUID | N
         .filter(or_(PoRequest.heartbeat_at.is_(None), PoRequest.heartbeat_at < stale_before))
         .order_by(PoRequest.created_at.asc())
     )
-    if dialect == "postgresql":
+    if dialect in {"postgresql", "mssql"}:
         query = query.with_for_update(skip_locked=True)
     po = query.first()
     if po is None:

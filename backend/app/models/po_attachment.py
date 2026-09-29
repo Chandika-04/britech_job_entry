@@ -1,7 +1,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, LargeBinary, String, Uuid
+from sqlalchemy import ForeignKey, Integer, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -24,7 +24,9 @@ class PoAttachment(Base):
 
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     content_type: Mapped[str] = mapped_column(String(128), nullable=False, default="application/pdf")
-    pdf_bytes: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     page_count: Mapped[int] = mapped_column(Integer, nullable=False)
 
     po_request: Mapped["PoRequest"] = relationship(back_populates="attachment")

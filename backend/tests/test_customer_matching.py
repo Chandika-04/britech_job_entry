@@ -28,12 +28,11 @@ def _customer(number: str, company: str, active: bool = True) -> CustomerRecord:
     )
 
 
-def _po(db, settings, customer_name: str | None, customer_number: str | None = None):
+def _po(db, settings, customer_name: str | None):
     po = create_from_upload(db, filename="po.pdf", content_type="application/pdf", pdf_bytes=make_text_pdf())
     run_extraction(db, po.id, provider=FakeExtractionProvider(), settings=settings)
     po = get_po(db, po.id)
     po.customer_name = customer_name
-    po.customer_number = customer_number
     db.add(po)
     db.commit()
     return po
@@ -130,15 +129,6 @@ def test_alias_updates_when_reviewer_picks_a_different_customer(db, settings):
     aliases = db.query(CustomerAlias).all()
     assert len(aliases) == 1
     assert aliases[0].customer_number == "CORTEC"
-
-
-def test_falls_back_to_extracted_customer_number(db, settings):
-    fake = FakeShopKeeper.reset_shared()
-    po = _po(db, settings, "Completely Unknown Buyer", "cortec")
-    suggestion = suggest_customer(db, po, fake)
-    assert suggestion["status"] == "exact"
-    assert suggestion["customer"]["customer_number"] == "CORTEC"
-    assert suggestion["extracted_name"] == "cortec"
 
 
 def test_ship_to_rows_are_never_suggested(db, settings):

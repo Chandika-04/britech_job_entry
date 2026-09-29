@@ -54,7 +54,6 @@ export interface PoSummary {
   review_state: ReviewState;
   po_number: string | null;
   customer_name: string | null;
-  customer_number: string | null;
   warnings: WarningItem[];
   is_stale: boolean;
   has_duplicate_warning: boolean;
@@ -101,7 +100,6 @@ export interface LineItemDraft {
 export interface PoDraft {
   po_number: string;
   customer_name: string;
-  customer_number: string;
   order_date: string;
   requested_ship_date: string;
   buyer_contact: string;

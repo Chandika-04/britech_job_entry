@@ -68,7 +68,6 @@ def test_conflicting_and_missing_fields(db):
     extraction = extraction_with(
         po_number=None,
         customer_name=None,
-        customer_number=None,
         document_quality="poor",
         unreadable_pages=[2],
         conflicting_fields=["requested_ship_date"],
@@ -82,7 +81,6 @@ def test_conflicting_and_missing_fields(db):
     assert "missing_po_number" in codes
     assert "missing_customer" in codes
     assert "missing_quantity" in codes
-    assert "missing_due_date" in codes
     assert "poor_document_quality" in codes
     assert "unreadable_page" in codes
     assert "conflicting_values" in codes

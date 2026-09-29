@@ -65,11 +65,8 @@ export function PoHeaderForm({ draft, onChange, disabled }: Props) {
       </Group>
 
       <Group title="Customer">
-        <Field label="Customer name" className="col-span-2 lg:col-span-3">
+        <Field label="Customer name" className="col-span-2 lg:col-span-4">
           <Input value={draft.customer_name} disabled={disabled} onChange={(event) => set("customer_name", event.target.value)} />
-        </Field>
-        <Field label="Customer #" className="col-span-2 lg:col-span-1">
-          <Input className="font-mono" value={draft.customer_number} disabled={disabled} onChange={(event) => set("customer_number", event.target.value)} />
         </Field>
       </Group>
 

@@ -115,6 +115,7 @@ def test_create_job_writes_reviewed_price_and_customer_tax(db, settings):
     assert fake.last_payload.tax_code == "NT"
     assert fake.last_payload.cert_required is False
     assert fake.last_payload.part_description == "Test housing"
+    assert fake.last_payload.unit == "Each"
     audits = db.query(ErpWriteAudit).filter_by(line_item_id=line.id).all()
     assert {row.action for row in audits} >= {"attempt", "create_job"}
 
@@ -256,7 +257,6 @@ def test_lookup_and_create_via_api(client, db, settings):
             "po": {
                 "po_number": detail["po_number"],
                 "customer_name": detail["customer_name"],
-                "customer_number": detail["customer_number"],
                 "order_date": detail["order_date"],
                 "requested_ship_date": detail["requested_ship_date"],
                 "buyer_contact": detail["buyer_contact"],

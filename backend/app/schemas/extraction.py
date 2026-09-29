@@ -20,7 +20,6 @@ class ExtractedLineItem(BaseModel):
 class ExtractionResult(BaseModel):
     po_number: str | None = None
     customer_name: str | None = None
-    customer_number: str | None = None
     order_date: date | None = None
     requested_ship_date: date | None = None
     buyer_contact: str | None = None

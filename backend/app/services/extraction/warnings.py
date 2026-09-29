@@ -2,22 +2,31 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.models.po_line_item import PoLineItem
 from app.models.po_request import PoRequest, ReviewState
 from app.schemas.extraction import ExtractionResult, WarningItem
+
+
+DUPLICATE_CODES = {"duplicate_po", "duplicate_po_confirmed"}
 
 
 def find_duplicate_pos(
     db: Session,
     *,
-    customer_number: str | None,
+    customer_codes: set[str],
     po_number: str | None,
     exclude_id: UUID | None = None,
 ) -> list[PoRequest]:
-    if not customer_number or not po_number:
+    if not customer_codes or not po_number:
         return []
-    query = db.query(PoRequest).filter(
-        PoRequest.customer_number == customer_number.strip(),
-        PoRequest.po_number == po_number.strip(),
+    query = (
+        db.query(PoRequest)
+        .join(PoLineItem, PoLineItem.po_request_id == PoRequest.id)
+        .filter(
+            PoRequest.po_number == po_number.strip(),
+            PoLineItem.resolved_customer_code.in_(customer_codes),
+        )
+        .distinct()
     )
     if exclude_id is not None:
         query = query.filter(PoRequest.id != exclude_id)
@@ -27,13 +36,13 @@ def find_duplicate_pos(
 def duplicate_warnings(
     db: Session,
     *,
-    customer_number: str | None,
+    customer_codes: set[str],
     po_number: str | None,
     exclude_id: UUID | None = None,
 ) -> list[WarningItem]:
     matches = find_duplicate_pos(
         db,
-        customer_number=customer_number,
+        customer_codes=customer_codes,
         po_number=po_number,
         exclude_id=exclude_id,
     )
@@ -47,7 +56,7 @@ def duplicate_warnings(
             WarningItem(
                 code="duplicate_po_confirmed",
                 message=(
-                    "A confirmed purchase order already exists for this customer number "
+                    "A confirmed purchase order already exists for this ShopKeeper customer "
                     f"and PO number ({sample.po_number}). Please review carefully."
                 ),
                 severity="prominent",
@@ -58,12 +67,19 @@ def duplicate_warnings(
         WarningItem(
             code="duplicate_po",
             message=(
-                "Another purchase order already exists for this customer number "
+                "Another purchase order already exists for this ShopKeeper customer "
                 f"and PO number ({sample.po_number})."
             ),
             severity="warning",
         )
     ]
+
+
+def refresh_duplicate_warnings(db: Session, po: PoRequest) -> None:
+    codes = {line.resolved_customer_code for line in po.line_items if line.resolved_customer_code}
+    kept = [item for item in (po.warnings or []) if not (isinstance(item, dict) and item.get("code") in DUPLICATE_CODES)]
+    extra = duplicate_warnings(db, customer_codes=codes, po_number=po.po_number, exclude_id=po.id)
+    po.warnings = kept + [item.model_dump() for item in extra]
 
 
 def build_warnings(
@@ -81,7 +97,7 @@ def build_warnings(
                 message="Missing PO number.",
             )
         )
-    if not extraction.customer_name and not extraction.customer_number:
+    if not extraction.customer_name:
         warnings.append(
             WarningItem(
                 code="missing_customer",
@@ -148,13 +164,6 @@ def build_warnings(
                     message=f"Missing quantity on line {label}.",
                 )
             )
-        if item.due_date is None:
-            warnings.append(
-                WarningItem(
-                    code="missing_due_date",
-                    message=f"Missing due date on line {label}.",
-                )
-            )
         has_identity = bool(item.customer_part_number or item.description)
         has_details = item.quantity is not None or item.unit_price is not None
         if has_identity and not has_details:
@@ -177,12 +186,4 @@ def build_warnings(
         if text:
             warnings.append(WarningItem(code="extraction_note", message=text, severity="info"))
 
-    warnings.extend(
-        duplicate_warnings(
-            db,
-            customer_number=extraction.customer_number,
-            po_number=extraction.po_number,
-            exclude_id=exclude_id,
-        )
-    )
     return warnings

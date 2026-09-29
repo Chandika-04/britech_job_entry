@@ -2,7 +2,7 @@
 .env
 .env.local
 *.pem
-references/job_write_test
+references/
 
 # Python
 __pycache__/
@@ -24,6 +24,7 @@ htmlcov/
 node_modules/
 frontend/dist/
 frontend/.vite/
+*.tsbuildinfo
 *.log
 npm-debug.log*
 
@@ -41,5 +42,6 @@ Thumbs.db
 *.sqlite3
 
 # Uploads / temp
+backend/storage/
 tmp/
 .cache/

@@ -46,7 +46,7 @@ def upgrade() -> None:
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         sa.ForeignKeyConstraint(["po_id"], ["po_request.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["line_item_id"], ["po_line_item.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["line_item_id"], ["po_line_item.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_erp_write_audit_po_id", "erp_write_audit", ["po_id"])

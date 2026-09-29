@@ -41,6 +41,9 @@ class Settings(BaseSettings):
 
     pdf_render_dpi: int = 150
 
+    pdf_storage_dir: str = ""
+    pdf_backup_dir: str = ""
+
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     max_extraction_retries: int = 5
@@ -56,6 +59,16 @@ class Settings(BaseSettings):
     @property
     def sqlalchemy_database_url(self) -> str:
         return normalize_database_url(self.database_url)
+
+    @property
+    def pdf_storage_path(self) -> Path:
+        value = self.pdf_storage_dir.strip()
+        return Path(value) if value else BACKEND_ROOT / "storage" / "pdfs"
+
+    @property
+    def pdf_backup_path(self) -> Path | None:
+        value = self.pdf_backup_dir.strip()
+        return Path(value) if value else None
 
     @property
     def max_upload_bytes(self) -> int:

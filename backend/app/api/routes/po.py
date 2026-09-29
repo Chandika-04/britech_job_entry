@@ -106,7 +106,7 @@ def get_attachment(po_id: UUID, db: Session = Depends(get_db)) -> Response:
     headers = {
         "Content-Disposition": f'inline; filename="{attachment.filename}"',
     }
-    return Response(content=attachment.pdf_bytes, media_type="application/pdf", headers=headers)
+    return Response(content=pdf_storage.read(attachment), media_type="application/pdf", headers=headers)
 
 
 @router.get("/{po_id}/attachment/page/{page_number}")
@@ -117,7 +117,7 @@ def get_attachment_page(po_id: UUID, page_number: int, db: Session = Depends(get
         raise NotFoundError("Original PDF was not found.")
     if page_number < 1 or page_number > attachment.page_count:
         raise PdfValidationError("Requested page is outside the document.")
-    doc = open_pdf(attachment.pdf_bytes)
+    doc = open_pdf(pdf_storage.read(attachment))
     try:
         png = render_page_png(doc, page_number)
     finally:

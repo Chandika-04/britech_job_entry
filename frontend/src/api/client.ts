@@ -44,7 +44,6 @@ export function draftToPayload(draft: PoDraft) {
   return {
     po_number: emptyToNull(draft.po_number),
     customer_name: emptyToNull(draft.customer_name),
-    customer_number: emptyToNull(draft.customer_number),
     order_date: emptyToNull(draft.order_date),
     requested_ship_date: emptyToNull(draft.requested_ship_date),
     buyer_contact: emptyToNull(draft.buyer_contact),

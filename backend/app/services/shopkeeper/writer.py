@@ -13,9 +13,11 @@ from app.models.customer_alias import CustomerAlias
 from app.models.erp_write_audit import ErpWriteAudit
 from app.models.po_line_item import PoLineItem
 from app.models.po_request import PoRequest, ReviewState
+from app.services.extraction.warnings import refresh_duplicate_warnings
 from app.services.shopkeeper.matching import MatchResult, match_customer, normalize
 from app.services.shopkeeper.provider import ShopKeeperProvider, get_shopkeeper_provider
 from app.services.shopkeeper.types import CustomerRecord, JobWritePayload, PartRecord
+from app.services.units import normalize_unit
 
 _LINE_LOCKS: dict[UUID, threading.Lock] = {}
 _LINE_LOCKS_GUARD = threading.Lock()
@@ -121,7 +123,7 @@ def _alias_map(db: Session) -> dict[str, str]:
 
 
 def _extracted_customer_names(po: PoRequest) -> list[str]:
-    return [name for name in (po.customer_name, po.customer_number) if name and name.strip()]
+    return [po.customer_name] if po.customer_name and po.customer_name.strip() else []
 
 
 def suggest_customer(db: Session, po: PoRequest, provider: ShopKeeperProvider | None = None) -> dict:
@@ -250,6 +252,7 @@ def resolve_customer(
         find_duplicates(po, item, provider)
         refresh_line_status(item, po)
     save_customer_alias(db, po, customer.customer_number)
+    refresh_duplicate_warnings(db, po)
     return targets
 
 
@@ -453,6 +456,7 @@ def create_job_for_line(
                 part_description=part.description,
                 quantity=quantity,
                 unit_price=unit_price,
+                unit=normalize_unit(line.uom),
                 due_date=line.due_date,
                 cert_required=customer.cert_default,
                 taxable=taxable,
@@ -472,6 +476,7 @@ def create_job_for_line(
                 "part_revision": payload.part_revision,
                 "quantity": payload.quantity,
                 "unit_price": str(payload.unit_price),
+                "unit": payload.unit,
             }
             job_number = provider.create_job(payload)
             line.erp_status = "created"

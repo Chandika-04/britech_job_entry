@@ -37,7 +37,7 @@ function needsAttention(line: LineItem): boolean {
 }
 
 export function ShopKeeperPanel({ po, onChange, onError, onNotice, disabled }: Props) {
-  const [customerQuery, setCustomerQuery] = useState(po.customer_name || po.customer_number || "");
+  const [customerQuery, setCustomerQuery] = useState(po.customer_name || "");
   const [customerMatches, setCustomerMatches] = useState<CustomerCandidate[]>([]);
   const [applyToAll, setApplyToAll] = useState(true);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
@@ -69,7 +69,7 @@ export function ShopKeeperPanel({ po, onChange, onError, onNotice, disabled }: P
     return () => {
       cancelled = true;
     };
-  }, [po.id, po.customer_name, po.customer_number]);
+  }, [po.id, po.customer_name]);
 
   const run = async (lineId: string | null, work: () => Promise<PoDetail>, notice?: string) => {
     setBusyLine(lineId);

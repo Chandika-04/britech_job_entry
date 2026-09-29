@@ -190,7 +190,7 @@ class SqlServerShopKeeper:
                 payload.part_description,
                 payload.quantity,
                 payload.unit_price,
-                "Each",
+                payload.unit,
                 1 if payload.cert_required else 0,
                 1 if payload.taxable else 0,
                 payload.tax_code,

@@ -1,5 +1,6 @@
 import logging
 import os
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -13,7 +14,9 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import api_router
 from app.config import get_settings
+from app.database.session import get_session_factory
 from app.exceptions import AppError
+from app.services.storage.pdf_storage import pdf_storage
 from app.workers.extraction_worker import start_worker, stop_worker
 
 logging.basicConfig(level=logging.INFO)
@@ -32,9 +35,21 @@ def run_migrations() -> None:
     command.upgrade(config, "head")
 
 
+def _sync_pdf_backup() -> None:
+    session = get_session_factory()()
+    try:
+        pdf_storage.sync_backup(session)
+    except Exception:
+        logging.getLogger(__name__).exception("PDF backup sync failed")
+    finally:
+        session.close()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    pdf_storage.check_ready()
     run_migrations()
+    threading.Thread(target=_sync_pdf_backup, name="pdf-backup-sync", daemon=True).start()
     start_worker()
     yield
     stop_worker()

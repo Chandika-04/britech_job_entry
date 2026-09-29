@@ -130,7 +130,6 @@ export function DashboardPage() {
                 <tr>
                   <th>PO #</th>
                   <th>Customer</th>
-                  <th>Cust #</th>
                   <th>Uploaded</th>
                   <th className="num">Pages</th>
                   <th>Extraction</th>
@@ -152,7 +151,6 @@ export function DashboardPage() {
                       </Link>
                     </td>
                     <td className="max-w-[320px] truncate">{item.customer_name || <span className="text-faint">Pending</span>}</td>
-                    <td className="font-mono text-muted">{item.customer_number || "—"}</td>
                     <td className="whitespace-nowrap font-mono text-muted tabular-nums">{formatDateTime(item.created_at)}</td>
                     <td className="num text-muted">{item.page_count ?? "—"}</td>
                     <td>

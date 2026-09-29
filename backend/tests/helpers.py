@@ -42,7 +42,6 @@ def extraction_with(**overrides) -> ExtractionResult:
     base = ExtractionResult(
         po_number="PO-1001",
         customer_name="Acme Manufacturing",
-        customer_number="CUST-42",
         order_date=date(2026, 3, 12),
         requested_ship_date=date(2026, 4, 1),
         buyer_contact="Jane Buyer",

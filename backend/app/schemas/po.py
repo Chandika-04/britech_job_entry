@@ -62,7 +62,6 @@ class LineItemOut(BaseModel):
 class PoUpdate(BaseModel):
     po_number: str | None = None
     customer_name: str | None = None
-    customer_number: str | None = None
     order_date: date | None = None
     requested_ship_date: date | None = None
     buyer_contact: str | None = None
@@ -99,7 +98,6 @@ class PoSummary(BaseModel):
     review_state: ReviewState
     po_number: str | None = None
     customer_name: str | None = None
-    customer_number: str | None = None
     warnings: list[WarningItem] = Field(default_factory=list)
     is_stale: bool = False
     has_duplicate_warning: bool = False

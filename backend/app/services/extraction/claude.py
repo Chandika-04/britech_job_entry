@@ -24,9 +24,11 @@ EXTRACTION_TOOL = {
         "properties": {
             "po_number": {"type": ["string", "null"]},
             "customer_name": {"type": ["string", "null"]},
-            "customer_number": {"type": ["string", "null"]},
             "order_date": {"type": ["string", "null"], "description": "YYYY-MM-DD"},
-            "requested_ship_date": {"type": ["string", "null"], "description": "YYYY-MM-DD"},
+            "requested_ship_date": {
+                "type": ["string", "null"],
+                "description": "Header ship/need-by date YYYY-MM-DD. Not a blanket-PO or revision date.",
+            },
             "buyer_contact": {"type": ["string", "null"]},
             "buyer_notes": {"type": ["string", "null"]},
             "bill_to": {"type": ["string", "null"]},
@@ -46,13 +48,30 @@ EXTRACTION_TOOL = {
                     "additionalProperties": False,
                     "properties": {
                         "line_number": {"type": ["integer", "null"]},
-                        "customer_part_number": {"type": ["string", "null"]},
-                        "revision": {"type": ["string", "null"]},
+                        "customer_part_number": {
+                            "type": ["string", "null"],
+                            "description": "Part number as printed, without revision or trailing punctuation. "
+                            "Use 'EXPEDITE' for expedite/rush fee lines.",
+                        },
+                        "revision": {
+                            "type": ["string", "null"],
+                            "description": "Revision only, e.g. 'A'. Null if none is shown.",
+                        },
                         "description": {"type": ["string", "null"]},
-                        "quantity": {"type": ["number", "string", "null"]},
-                        "unit_price": {"type": ["number", "string", "null"]},
-                        "uom": {"type": ["string", "null"]},
-                        "due_date": {"type": ["string", "null"], "description": "YYYY-MM-DD"},
+                        "quantity": {
+                            "type": ["number", "null"],
+                            "description": "Ordered quantity exactly as stated on the PO (LOT lines included). "
+                            "0 if no quantity is stated. Never text like 'LOT'; put that in uom.",
+                        },
+                        "unit_price": {
+                            "type": ["number", "null"],
+                            "description": "Price as stated. Per-piece price if shown, otherwise the lot/line charge. "
+                            "Never divide a total by quantity. Null if no price is shown.",
+                        },
+                        "uom": {
+                            "type": ["string", "null"],
+                            "description": "LOT if the line is priced as a lot, otherwise EA.",
+                        },
                         "notes": {"type": ["string", "null"]},
                     },
                     "required": [
@@ -63,7 +82,6 @@ EXTRACTION_TOOL = {
                         "quantity",
                         "unit_price",
                         "uom",
-                        "due_date",
                         "notes",
                     ],
                 },
@@ -72,7 +90,6 @@ EXTRACTION_TOOL = {
         "required": [
             "po_number",
             "customer_name",
-            "customer_number",
             "order_date",
             "requested_ship_date",
             "buyer_contact",

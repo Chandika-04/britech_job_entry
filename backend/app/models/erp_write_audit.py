@@ -20,7 +20,8 @@ class ErpWriteAudit(Base):
     )
     line_item_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("po_line_item.id", ondelete="SET NULL"),
+        # No ON DELETE rule: SQL Server rejects a second cascade path through po_line_item.
+        ForeignKey("po_line_item.id"),
         nullable=True,
         index=True,
     )

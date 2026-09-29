@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -17,6 +17,9 @@ from app.services.po_service import (
     queue_reextract,
     save_draft,
 )
+from app.services.shopkeeper.fake import FakeShopKeeper
+from app.services.storage.pdf_storage import pdf_storage
+from app.services.shopkeeper.writer import resolve_customer
 from tests.helpers import extraction_with, make_text_pdf, pdf_upload
 
 
@@ -33,29 +36,50 @@ def _extract(db, settings, pdf=None, provider=None):
 
 def test_duplicate_detection_nonblocking_and_prominent(db, settings):
     first = _extract(db, settings)
+    first.line_items[0].resolved_customer_code = "ACME"
     first.review_state = ReviewState.confirmed
     db.add(first)
     db.commit()
 
-    warnings = duplicate_warnings(
-        db,
-        customer_number=first.customer_number,
-        po_number=first.po_number,
-        exclude_id=None,
-    )
+    assert duplicate_warnings(db, customer_codes=set(), po_number=first.po_number) == []
+    assert duplicate_warnings(db, customer_codes={"OTHER"}, po_number=first.po_number) == []
+
+    warnings = duplicate_warnings(db, customer_codes={"ACME"}, po_number=first.po_number)
     assert warnings[0].code == "duplicate_po_confirmed"
     assert warnings[0].severity == "prominent"
 
     first.review_state = ReviewState.unreviewed
     db.add(first)
     db.commit()
-    warnings = duplicate_warnings(
-        db,
-        customer_number=first.customer_number,
-        po_number=first.po_number,
-        exclude_id=None,
-    )
+    warnings = duplicate_warnings(db, customer_codes={"ACME"}, po_number=first.po_number)
     assert warnings[0].code == "duplicate_po"
+
+
+def test_duplicate_warning_added_when_shopkeeper_customer_chosen(db, settings):
+    fake = FakeShopKeeper.reset_shared()
+    first = _extract(db, settings)
+    resolve_customer(db, first, first.line_items[0], "ACME", True, fake)
+    db.commit()
+
+    second = _extract(db, settings)
+    assert not any(item["code"] == "duplicate_po" for item in second.warnings)
+    resolve_customer(db, second, second.line_items[0], "CORTEC", True, fake)
+    assert not any(item["code"] == "duplicate_po" for item in second.warnings)
+    resolve_customer(db, second, second.line_items[0], "ACME", True, fake)
+    assert any(item["code"] == "duplicate_po" for item in second.warnings)
+
+
+def test_extraction_sets_today_due_date_and_lot_or_each_unit(db, settings):
+    base = extraction_with().line_items[0]
+    extraction = extraction_with(
+        line_items=[
+            base.model_copy(update={"uom": "LOT", "due_date": date(2020, 1, 1)}),
+            base.model_copy(update={"line_number": 2, "uom": "pcs", "due_date": None}),
+        ]
+    )
+    po = _extract(db, settings, provider=FakeExtractionProvider(result=extraction))
+    assert [item.uom for item in po.line_items] == ["Lot", "Each"]
+    assert all(item.due_date == date.today() for item in po.line_items)
 
 
 def test_review_edits_and_confirmation_reset(db, settings):
@@ -66,7 +90,6 @@ def test_review_edits_and_confirmation_reset(db, settings):
     payload = PoUpdate(
         po_number=po.po_number,
         customer_name="Updated Customer",
-        customer_number=po.customer_number,
         order_date=po.order_date,
         requested_ship_date=po.requested_ship_date,
         buyer_contact=po.buyer_contact,
@@ -145,7 +168,7 @@ def test_failed_extraction_keeps_pdf(db, settings):
     assert po.status == PoStatus.failed
     assert po.extraction_error == "Extraction failed. Please try again."
     assert po.attachment is not None
-    assert po.attachment.pdf_bytes.startswith(b"%PDF")
+    assert pdf_storage.read(po.attachment).startswith(b"%PDF")
 
 
 def test_stale_heartbeat_is_claimable(db, settings):
@@ -178,7 +201,6 @@ def test_confirm_via_api(client, db, settings):
             "po": {
                 "po_number": detail["po_number"],
                 "customer_name": detail["customer_name"],
-                "customer_number": detail["customer_number"],
                 "order_date": detail["order_date"],
                 "requested_ship_date": detail["requested_ship_date"],
                 "buyer_contact": detail["buyer_contact"],

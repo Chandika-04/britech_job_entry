@@ -8,6 +8,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { LineItemDraft, PoDraft } from "@/types/po";
 
+const UNITS = ["Each", "Lot"] as const;
+
+function todayIso(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
 function emptyLine(index: number): LineItemDraft {
   return {
     line_number: String(index),
@@ -16,8 +25,8 @@ function emptyLine(index: number): LineItemDraft {
     description: "",
     quantity: "",
     unit_price: "",
-    uom: "EA",
-    due_date: "",
+    uom: "Each",
+    due_date: todayIso(),
     notes: "",
   };
 }
@@ -101,7 +110,7 @@ function LineItemsTable({ items, disabled, onUpdate, onRemove }: ListProps) {
             <th className="w-16">Rev</th>
             <th>Description</th>
             <th className="num w-20">Qty</th>
-            <th className="w-16">UOM</th>
+            <th className="w-20">Unit</th>
             <th className="num w-24">Unit price</th>
             <th className="w-36">Due</th>
             <th className="w-16" aria-label="Actions" />
@@ -161,13 +170,19 @@ function LineItemsTable({ items, disabled, onUpdate, onRemove }: ListProps) {
                     />
                   </td>
                   <td>
-                    <input
-                      className="cell-input font-mono"
+                    <select
+                      className="cell-input"
                       value={item.uom}
                       disabled={disabled}
-                      aria-label="Unit of measure"
+                      aria-label="Unit"
                       onChange={(event) => onUpdate(index, "uom", event.target.value)}
-                    />
+                    >
+                      {UNITS.map((unit) => (
+                        <option key={unit} value={unit}>
+                          {unit}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td>
                     <input
@@ -264,8 +279,19 @@ function LineItemsStack({ items, disabled, onUpdate, onRemove }: ListProps) {
             <MobileField label="Rev">
               <Input value={item.revision} disabled={disabled} onChange={(event) => onUpdate(index, "revision", event.target.value)} />
             </MobileField>
-            <MobileField label="UOM">
-              <Input value={item.uom} disabled={disabled} onChange={(event) => onUpdate(index, "uom", event.target.value)} />
+            <MobileField label="Unit">
+              <select
+                className="h-10 w-full rounded-md border border-rule bg-white px-2.5 text-sm text-ink focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/15 disabled:bg-head disabled:text-muted"
+                value={item.uom}
+                disabled={disabled}
+                onChange={(event) => onUpdate(index, "uom", event.target.value)}
+              >
+                {UNITS.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
+              </select>
             </MobileField>
             <MobileField label="Description" wide>
               <Input value={item.description} disabled={disabled} onChange={(event) => onUpdate(index, "description", event.target.value)} />

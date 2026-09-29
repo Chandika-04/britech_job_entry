@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -17,6 +17,7 @@ from app.services.extraction.provider import ExtractionProvider, get_extraction_
 from app.services.extraction.warnings import build_warnings
 from app.services.pdf.processor import process_pdf
 from app.services.storage.pdf_storage import pdf_storage
+from app.services.units import normalize_unit
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,6 @@ logger = logging.getLogger(__name__)
 def _apply_extraction(po: PoRequest, extraction: ExtractionResult) -> None:
     po.po_number = extraction.po_number
     po.customer_name = extraction.customer_name
-    po.customer_number = extraction.customer_number
     po.order_date = extraction.order_date
     po.requested_ship_date = extraction.requested_ship_date
     po.buyer_contact = extraction.buyer_contact
@@ -32,6 +32,8 @@ def _apply_extraction(po: PoRequest, extraction: ExtractionResult) -> None:
     po.bill_to = extraction.bill_to
     po.ship_to = extraction.ship_to
     po.line_items.clear()
+    # Jobs are always due the day they are entered, whatever the PO says.
+    today = date.today()
     for item in extraction.line_items:
         po.line_items.append(
             PoLineItem(
@@ -41,8 +43,8 @@ def _apply_extraction(po: PoRequest, extraction: ExtractionResult) -> None:
                 description=item.description,
                 quantity=item.quantity,
                 unit_price=item.unit_price,
-                uom=item.uom,
-                due_date=item.due_date,
+                uom=normalize_unit(item.uom),
+                due_date=today,
                 notes=item.notes,
                 reviewer_edited=False,
             )
@@ -106,7 +108,7 @@ def run_extraction(
     try:
         _set_heartbeat(po_id)
         db.refresh(po)
-        processed = process_pdf(attachment.pdf_bytes, settings)
+        processed = process_pdf(pdf_storage.read(attachment), settings)
         worker.start()
         result: ProviderResult = provider.extract(processed)
         db.expire_all()

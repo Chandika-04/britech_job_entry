@@ -22,7 +22,6 @@ function toDraft(po: PoDetail): PoDraft {
   return {
     po_number: asText(po.po_number),
     customer_name: asText(po.customer_name),
-    customer_number: asText(po.customer_number),
     order_date: asText(po.order_date),
     requested_ship_date: asText(po.requested_ship_date),
     buyer_contact: asText(po.buyer_contact),
@@ -38,7 +37,7 @@ function toDraft(po: PoDetail): PoDraft {
         description: asText(item.description),
         quantity: asText(item.quantity),
         unit_price: asText(item.unit_price),
-        uom: asText(item.uom),
+        uom: item.uom === "Lot" ? "Lot" : "Each",
         due_date: asText(item.due_date),
         notes: asText(item.notes),
       }),

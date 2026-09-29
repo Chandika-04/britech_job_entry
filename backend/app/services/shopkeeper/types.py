@@ -39,6 +39,7 @@ class JobWritePayload:
     part_description: str | None
     quantity: int
     unit_price: Decimal
+    unit: str
     due_date: date
     cert_required: bool
     taxable: bool

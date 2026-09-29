@@ -34,6 +34,8 @@ def settings(tmp_path, monkeypatch):
     monkeypatch.setenv("HEARTBEAT_STALE_SECONDS", "30")
     monkeypatch.setenv("SHOPKEEPER_PROVIDER", "fake")
     monkeypatch.setenv("SHOPKEEPER_EXPECTED_DATABASE", "SkData_Test")
+    monkeypatch.setenv("PDF_STORAGE_DIR", str(tmp_path / "pdfs"))
+    monkeypatch.setenv("PDF_BACKUP_DIR", str(tmp_path / "pdf-backup"))
     get_settings.cache_clear()
     reset_engine()
     from app.services.shopkeeper.fake import FakeShopKeeper
