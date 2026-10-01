@@ -167,9 +167,9 @@ export function ReviewPage() {
 
       <WarningsBanner warnings={po.warnings} />
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      <div className="grid gap-3 xl:grid-cols-[minmax(26rem,5fr)_minmax(0,7fr)]">
         <PdfViewer poId={po.id} pageCount={po.page_count ?? 1} />
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           <Card>
             <CardHeader>
               <CardTitle>PO information</CardTitle>
@@ -190,7 +190,7 @@ export function ReviewPage() {
             {draft ? <LineItemsEditor draft={draft} onChange={setDraft} disabled={disabled} /> : null}
           </Card>
           {po.status === "extracted" ? (
-            <Card className="overflow-hidden">
+            <Card className="min-w-0">
               <CardHeader>
                 <CardTitle>ShopKeeper jobs</CardTitle>
               </CardHeader>

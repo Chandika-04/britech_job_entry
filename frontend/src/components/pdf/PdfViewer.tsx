@@ -12,7 +12,7 @@ export function PdfViewer({ poId, pageCount }: { poId: string; pageCount: number
   const src = useMemo(() => api.pageUrl(poId, page), [poId, page]);
 
   return (
-    <Card className="overflow-hidden xl:sticky xl:top-[104px] xl:self-start">
+    <Card className="overflow-hidden xl:sticky xl:top-[104px] xl:min-w-[26rem] xl:self-start">
       <CardHeader className="flex flex-wrap items-center justify-between gap-2">
         <CardTitle>Original PO</CardTitle>
         <div className="flex items-center gap-1">

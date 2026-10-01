@@ -177,8 +177,8 @@ export function ShopKeeperPanel({ po, onChange, onError, onNotice, disabled }: P
         </span>
       </div>
 
-      <div className="hidden overflow-x-auto md:block">
-        <table className="data-table">
+      <div className="hidden min-w-0 md:block">
+        <table className="data-table wrap">
           <thead>
             <tr>
               <th className="w-8" aria-label="Expand" />
@@ -205,14 +205,14 @@ export function ShopKeeperPanel({ po, onChange, onError, onNotice, disabled }: P
                       {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </td>
                     <td className="num">{line.line_number ?? "—"}</td>
-                    <td className="whitespace-nowrap font-mono">
+                    <td className="font-mono">
                       {line.customer_part_number || <span className="text-faint">—</span>}
                       {line.revision ? <span className="text-muted"> rev {line.revision}</span> : null}
                     </td>
                     <td className="num">{line.quantity ?? "—"}</td>
-                    <td className="whitespace-nowrap font-mono text-muted">{line.due_date || "—"}</td>
+                    <td className="font-mono text-muted">{line.due_date || "—"}</td>
                     <td className="font-mono">{line.resolved_customer_code || <span className="text-faint">—</span>}</td>
-                    <td className="whitespace-nowrap font-mono">
+                    <td className="font-mono">
                       {line.resolved_part_number ? (
                         <>
                           {line.resolved_part_number}
@@ -229,14 +229,14 @@ export function ShopKeeperPanel({ po, onChange, onError, onNotice, disabled }: P
                       <ErpBadge status={line.erp_status} />
                     </td>
                     <td className="font-mono font-semibold">{line.erp_job_number || <span className="font-normal text-faint">—</span>}</td>
-                    <td className="text-right" onClick={(event) => event.stopPropagation()}>
+                    <td className="whitespace-nowrap text-right" onClick={(event) => event.stopPropagation()}>
                       <CreateJobButton po={po} line={line} confirmed={confirmed} disabled={lineDisabled} onRun={run} />
                     </td>
                   </tr>
                   {open ? (
                     <tr className="bg-head">
                       <td />
-                      <td colSpan={10} className="pb-3">
+                      <td colSpan={10} className="min-w-0 pb-3">
                         <LineDetail po={po} line={line} disabled={lineDisabled} onRun={run} />
                       </td>
                     </tr>
@@ -395,8 +395,8 @@ function CustomerTable({
   bare?: boolean;
 }) {
   return (
-    <div className={cn("overflow-x-auto", !bare && "mt-2 rounded-md border border-rule")}>
-      <table className="data-table">
+    <div className={cn("min-w-0", !bare && "mt-2 rounded-md border border-rule")}>
+      <table className="data-table wrap">
         {!bare ? (
           <thead>
             <tr>
@@ -417,12 +417,12 @@ function CustomerTable({
                 <td>{customer.company || <span className="text-faint">No company name</span>}</td>
                 <td className="text-xs text-muted">{customer.record_type}</td>
                 <td>
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap gap-1">
                     {customer.credit_hold ? <Badge variant="warning">Credit hold</Badge> : null}
                     {customer.active ? null : <Badge variant="muted">Inactive</Badge>}
                   </div>
                 </td>
-                <td className="text-right">
+                <td className="whitespace-nowrap text-right">
                   <Button
                     type="button"
                     size="sm"
@@ -565,15 +565,15 @@ function LineDetail({
       )}
 
       {partMatches.length > 0 && !created ? (
-        <div className="overflow-x-auto rounded-md border border-rule bg-white">
-          <table className="data-table">
+        <div className="min-w-0 rounded-md border border-rule bg-white">
+          <table className="data-table wrap">
             <thead>
               <tr>
-                <th>Part #</th>
-                <th>Rev</th>
+                <th className="w-[22%]">Part #</th>
+                <th className="w-12">Rev</th>
                 <th>Description</th>
-                <th>Type</th>
-                <th aria-label="Action" />
+                <th className="w-20">Type</th>
+                <th className="w-20" aria-label="Action" />
               </tr>
             </thead>
             <tbody>
@@ -583,7 +583,7 @@ function LineDetail({
                   <td className="font-mono">{match.part_revision}</td>
                   <td>{match.description || <span className="text-faint">No description</span>}</td>
                   <td className="text-xs text-muted">{match.master_type || "—"}</td>
-                  <td className="text-right">
+                  <td className="whitespace-nowrap text-right">
                     <Button
                       type="button"
                       size="sm"

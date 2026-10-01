@@ -94,6 +94,17 @@ textarea {
     padding: 2px 4px;
   }
 
+  .data-table.wrap {
+    table-layout: fixed;
+  }
+
+  .data-table.wrap th,
+  .data-table.wrap td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    vertical-align: top;
+  }
+
   .cell-input {
     width: 100%;
     min-width: 0;
