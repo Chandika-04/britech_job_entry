@@ -102,5 +102,3 @@ See `.env.example`. Important variables:
 - Claude access is isolated behind `ExtractionProvider` / `ClaudeExtractionProvider`. The prompt is in `backend/app/services/extraction/prompt.py`.
 - ShopKeeper access is isolated behind `ShopKeeperProvider`. Live writes use pyodbc against SQL Server and stop if `DB_NAME()` does not match `SHOPKEEPER_EXPECTED_DATABASE`.
 - Duplicate-PO warnings match the PO number plus the ShopKeeper customer chosen during review.
-
-See `Phase2_Instructions.md` for the ShopKeeper write sequence and idempotency rules.

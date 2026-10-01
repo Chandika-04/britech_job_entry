@@ -1,8 +1,6 @@
-# Secrets
-.env
-.env.local
-*.pem
-references/
+# Local planning docs (keep on disk; not in the repo)
+Project_Instructions.md
+Phase2_Instructions.md
 
 # Python
 __pycache__/
