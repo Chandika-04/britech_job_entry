@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from app.services.shopkeeper.types import CustomerRecord, JobWritePayload, PartRecord
+from app.services.shopkeeper.types import CustomerRecord, JobWritePayload, PartRecord, ShipWritePayload
 
 
 class ShopKeeperProvider(Protocol):
@@ -19,6 +19,10 @@ class ShopKeeperProvider(Protocol):
     def find_jobs_by_po_line(self, po_number: str, po_line: str) -> list[str]: ...
 
     def create_job(self, payload: JobWritePayload) -> str: ...
+
+    def find_shipper_for_jobs(self, job_numbers: list[str]) -> str | None: ...
+
+    def create_shipper(self, payload: ShipWritePayload) -> str: ...
 
 
 def get_shopkeeper_provider() -> ShopKeeperProvider:

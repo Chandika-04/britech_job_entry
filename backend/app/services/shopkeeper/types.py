@@ -50,3 +50,17 @@ class JobWritePayload:
     ship_via: str | None
     master_type: str
     pm_linkid: int
+
+
+@dataclass
+class ShipLine:
+    job_number: str
+    quantity: int
+
+
+@dataclass
+class ShipWritePayload:
+    ship_via: str | None
+    ship_by: str | None
+    ship_date: date
+    lines: list[ShipLine]

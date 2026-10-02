@@ -18,7 +18,7 @@ interface Props {
   disabled?: boolean;
 }
 
-type RunLine = (lineId: string, work: () => Promise<PoDetail>, notice?: string) => Promise<void>;
+type RunLine = (lineId: number, work: () => Promise<PoDetail>, notice?: string) => Promise<void>;
 
 const MATCH_LABELS: Record<string, string> = {
   alias: "Matched from a previous confirmation",
@@ -41,10 +41,10 @@ export function ShopKeeperPanel({ po, onChange, onError, onNotice, disabled }: P
   const [customerMatches, setCustomerMatches] = useState<CustomerCandidate[]>([]);
   const [applyToAll, setApplyToAll] = useState(true);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
-  const [busyLine, setBusyLine] = useState<string | null>(null);
+  const [busyLine, setBusyLine] = useState<number | null>(null);
   const [suggestion, setSuggestion] = useState<CustomerSuggestion | null>(null);
   const [suggestionError, setSuggestionError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(
+  const [expanded, setExpanded] = useState<Set<number>>(
     () => new Set(po.line_items.filter(needsAttention).map((line) => line.id)),
   );
   const firstLineId = po.line_items[0]?.id;
@@ -71,7 +71,7 @@ export function ShopKeeperPanel({ po, onChange, onError, onNotice, disabled }: P
     };
   }, [po.id, po.customer_name]);
 
-  const run = async (lineId: string | null, work: () => Promise<PoDetail>, notice?: string) => {
+  const run = async (lineId: number | null, work: () => Promise<PoDetail>, notice?: string) => {
     setBusyLine(lineId);
     try {
       const result = await work();
@@ -85,7 +85,7 @@ export function ShopKeeperPanel({ po, onChange, onError, onNotice, disabled }: P
     }
   };
 
-  const toggle = (lineId: string) => {
+  const toggle = (lineId: number) => {
     setExpanded((current) => {
       const next = new Set(current);
       if (next.has(lineId)) next.delete(lineId);

@@ -6,6 +6,7 @@ The application accepts a scanned or digital PO PDF, extracts structured job inf
 
 - **Using the app:** [docs/user_manual.md](docs/user_manual.md)
 - **Installing on the warehouse PC:** [docs/warehouse_pc_setup.md](docs/warehouse_pc_setup.md)
+- **Shipping (create shipper):** [docs/shipping.md](docs/shipping.md)
 
 ## Production
 

@@ -21,14 +21,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 attachment = sa.table(
     "po_attachment",
-    sa.column("id", sa.Uuid()),
-    sa.column("po_request_id", sa.Uuid()),
+    sa.column("id", sa.Integer()),
+    sa.column("po_request_id", sa.Integer()),
     sa.column("pdf_bytes", sa.LargeBinary()),
     sa.column("storage_path", sa.String()),
     sa.column("size_bytes", sa.Integer()),
     sa.column("sha256", sa.String()),
 )
-po_request = sa.table("po_request", sa.column("id", sa.Uuid()), sa.column("created_at", sa.DateTime(timezone=True)))
+po_request = sa.table("po_request", sa.column("id", sa.Integer()), sa.column("created_at", sa.DateTime(timezone=True)))
 
 
 def upgrade() -> None:

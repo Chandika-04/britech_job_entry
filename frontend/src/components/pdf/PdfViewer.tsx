@@ -5,7 +5,7 @@ import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 
-export function PdfViewer({ poId, pageCount }: { poId: string; pageCount: number }) {
+export function PdfViewer({ poId, pageCount }: { poId: number | string; pageCount: number }) {
   const pages = Math.max(pageCount, 1);
   const [page, setPage] = useState(1);
   const [zoom, setZoom] = useState(1);

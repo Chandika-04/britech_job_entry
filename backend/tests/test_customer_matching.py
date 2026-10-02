@@ -1,5 +1,3 @@
-from uuid import UUID
-
 from app.models.customer_alias import CustomerAlias
 from app.services.extraction.fake import FakeExtractionProvider
 from app.services.extraction.pipeline import run_extraction
@@ -141,7 +139,7 @@ def test_ship_to_rows_are_never_suggested(db, settings):
 
 def test_customer_suggestion_api(client, db, settings):
     upload = client.post("/api/upload", files=pdf_upload("po.pdf", make_text_pdf()))
-    po_id = UUID(upload.json()["id"])
+    po_id = upload.json()["id"]
     run_extraction(db, po_id, provider=FakeExtractionProvider(), settings=settings)
     response = client.get(f"/api/po/{po_id}/customer-suggestion")
     assert response.status_code == 200

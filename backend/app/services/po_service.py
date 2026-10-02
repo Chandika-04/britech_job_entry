@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
@@ -80,6 +79,7 @@ def to_summary(po: PoRequest, settings: Settings | None = None) -> PoSummary:
         line_count=line_count,
         jobs_created_count=jobs_created_count,
         jobs_complete=line_count > 0 and jobs_created_count == line_count,
+        shipper_number=po.shipper_number,
     )
 
 
@@ -135,7 +135,7 @@ def create_from_upload(
     return po
 
 
-def get_po(db: Session, po_id: UUID) -> PoRequest:
+def get_po(db: Session, po_id: int) -> PoRequest:
     po = db.get(PoRequest, po_id)
     if po is None:
         raise NotFoundError()
@@ -317,7 +317,7 @@ def delete_po(db: Session, po: PoRequest) -> None:
         pdf_storage.delete_files(storage_path)
 
 
-def claim_pending_job(db: Session, settings: Settings | None = None) -> UUID | None:
+def claim_pending_job(db: Session, settings: Settings | None = None) -> int | None:
     settings = settings or get_settings()
     stale_before = datetime.now(UTC) - timedelta(seconds=settings.heartbeat_stale_seconds)
     dialect = db.get_bind().dialect.name

@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import threading
 from datetime import UTC, date, datetime
-from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -51,7 +50,7 @@ def _apply_extraction(po: PoRequest, extraction: ExtractionResult) -> None:
         )
 
 
-def _set_heartbeat(po_id: UUID) -> None:
+def _set_heartbeat(po_id: int) -> None:
     factory = get_session_factory()
     session = factory()
     try:
@@ -70,7 +69,7 @@ def _set_heartbeat(po_id: UUID) -> None:
 
 def run_extraction(
     db: Session,
-    po_id: UUID,
+    po_id: int,
     *,
     call_type: str = "extract",
     provider: ExtractionProvider | None = None,

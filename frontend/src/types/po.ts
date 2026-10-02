@@ -10,7 +10,7 @@ export interface WarningItem {
 }
 
 export interface LineItem {
-  id: string;
+  id: number;
   line_number: number | null;
   customer_part_number: string | null;
   revision: string | null;
@@ -37,7 +37,7 @@ export interface LineItem {
 }
 
 export interface LlmCall {
-  id: string;
+  id: number;
   model: string;
   call_type: string;
   input_tokens: number | null;
@@ -47,7 +47,7 @@ export interface LlmCall {
 }
 
 export interface PoSummary {
-  id: string;
+  id: number;
   created_at: string;
   updated_at: string;
   status: PoStatus;
@@ -61,6 +61,7 @@ export interface PoSummary {
   line_count: number;
   jobs_created_count: number;
   jobs_complete: boolean;
+  shipper_number: string | null;
 }
 
 export interface PoDetail extends PoSummary {
@@ -85,7 +86,7 @@ export interface PoListResponse {
 }
 
 export interface LineItemDraft {
-  id?: string;
+  id?: number;
   line_number: string;
   customer_part_number: string;
   revision: string;

@@ -20,6 +20,18 @@ def test_upload_valid_pdf(client):
     assert detail.json()["page_count"] == 1
 
 
+def test_two_uploads_are_separate_pos(client):
+    first = client.post("/api/upload", files=pdf_upload("po-a.pdf", make_text_pdf("PO A")))
+    second = client.post("/api/upload", files=pdf_upload("po-b.pdf", make_text_pdf("PO B")))
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["id"] != second.json()["id"]
+    listed = client.get("/api/po").json()
+    ids = {item["id"] for item in listed["items"]}
+    assert first.json()["id"] in ids
+    assert second.json()["id"] in ids
+
+
 def test_upload_invalid_file(client):
     response = client.post("/api/upload", files={"file": ("notes.txt", b"not a pdf", "text/plain")})
     assert response.status_code == 400

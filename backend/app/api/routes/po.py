@@ -1,5 +1,3 @@
-from uuid import UUID
-
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
@@ -53,18 +51,18 @@ def list_purchase_orders(
 
 
 @router.get("/{po_id}", response_model=PoDetail)
-def get_purchase_order(po_id: UUID, db: Session = Depends(get_db)) -> PoDetail:
+def get_purchase_order(po_id: int, db: Session = Depends(get_db)) -> PoDetail:
     return to_detail(get_po(db, po_id))
 
 
 @router.put("/{po_id}", response_model=PoDetail)
-def update_purchase_order(po_id: UUID, payload: PoUpdate, db: Session = Depends(get_db)) -> PoDetail:
+def update_purchase_order(po_id: int, payload: PoUpdate, db: Session = Depends(get_db)) -> PoDetail:
     po = get_po(db, po_id)
     return to_detail(save_draft(db, po, payload))
 
 
 @router.post("/{po_id}/review", response_model=PoDetail)
-def review_purchase_order(po_id: UUID, payload: ReviewAction, db: Session = Depends(get_db)) -> PoDetail:
+def review_purchase_order(po_id: int, payload: ReviewAction, db: Session = Depends(get_db)) -> PoDetail:
     po = get_po(db, po_id)
     action = (payload.action or "").strip().lower()
     if action in {"confirm", "confirm_reviewed"}:
@@ -80,7 +78,7 @@ def review_purchase_order(po_id: UUID, payload: ReviewAction, db: Session = Depe
 
 
 @router.post("/{po_id}/reextract", response_model=UploadResponse)
-def reextract_purchase_order(po_id: UUID, db: Session = Depends(get_db)) -> UploadResponse:
+def reextract_purchase_order(po_id: int, db: Session = Depends(get_db)) -> UploadResponse:
     po = get_po(db, po_id)
     po = queue_reextract(db, po)
     return UploadResponse(
@@ -91,14 +89,14 @@ def reextract_purchase_order(po_id: UUID, db: Session = Depends(get_db)) -> Uplo
 
 
 @router.delete("/{po_id}", response_model=MessageResponse)
-def delete_purchase_order(po_id: UUID, db: Session = Depends(get_db)) -> MessageResponse:
+def delete_purchase_order(po_id: int, db: Session = Depends(get_db)) -> MessageResponse:
     po = get_po(db, po_id)
     delete_po(db, po)
     return MessageResponse(message="Purchase order deleted.", id=po_id)
 
 
 @router.get("/{po_id}/attachment")
-def get_attachment(po_id: UUID, db: Session = Depends(get_db)) -> Response:
+def get_attachment(po_id: int, db: Session = Depends(get_db)) -> Response:
     po = get_po(db, po_id)
     attachment = pdf_storage.get_by_po(db, po.id)
     if attachment is None:
@@ -110,7 +108,7 @@ def get_attachment(po_id: UUID, db: Session = Depends(get_db)) -> Response:
 
 
 @router.get("/{po_id}/attachment/page/{page_number}")
-def get_attachment_page(po_id: UUID, page_number: int, db: Session = Depends(get_db)) -> Response:
+def get_attachment_page(po_id: int, page_number: int, db: Session = Depends(get_db)) -> Response:
     po = get_po(db, po_id)
     attachment = pdf_storage.get_by_po(db, po.id)
     if attachment is None:

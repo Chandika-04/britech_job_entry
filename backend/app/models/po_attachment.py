@@ -1,7 +1,6 @@
-import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, String, Uuid
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -13,9 +12,9 @@ if TYPE_CHECKING:
 class PoAttachment(Base):
     __tablename__ = "po_attachment"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    po_request_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True),
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    po_request_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("po_request.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,

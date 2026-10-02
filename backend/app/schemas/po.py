@@ -1,4 +1,3 @@
-import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated
@@ -18,7 +17,7 @@ UtcDatetime = Annotated[datetime, AfterValidator(_assume_utc)]
 
 
 class LineItemIn(BaseModel):
-    id: uuid.UUID | None = None
+    id: int | None = None
     line_number: int | None = None
     customer_part_number: str | None = None
     revision: str | None = None
@@ -33,7 +32,7 @@ class LineItemIn(BaseModel):
 class LineItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
+    id: int
     line_number: int | None = None
     customer_part_number: str | None = None
     revision: str | None = None
@@ -79,7 +78,7 @@ class ReviewAction(BaseModel):
 class LlmCallOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
+    id: int
     model: str
     call_type: str
     input_tokens: int | None = None
@@ -91,7 +90,7 @@ class LlmCallOut(BaseModel):
 class PoSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
+    id: int
     created_at: UtcDatetime
     updated_at: UtcDatetime
     status: PoStatus
@@ -105,6 +104,7 @@ class PoSummary(BaseModel):
     line_count: int = 0
     jobs_created_count: int = 0
     jobs_complete: bool = False
+    shipper_number: str | None = None
 
 
 class PoDetail(PoSummary):
@@ -129,11 +129,11 @@ class PoListResponse(BaseModel):
 
 
 class UploadResponse(BaseModel):
-    id: uuid.UUID
+    id: int
     status: PoStatus
     message: str
 
 
 class MessageResponse(BaseModel):
     message: str
-    id: uuid.UUID | None = None
+    id: int | None = None

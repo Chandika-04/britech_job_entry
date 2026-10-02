@@ -1,6 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from uuid import UUID
 
 from app.models.llm_call import LlmCall
 from app.models.po_request import PoStatus, ReviewState
@@ -191,7 +190,7 @@ def test_fresh_heartbeat_not_claimed(db, settings):
 
 def test_confirm_via_api(client, db, settings):
     upload = client.post("/api/upload", files=pdf_upload("po.pdf", make_text_pdf()))
-    po_id = UUID(upload.json()["id"])
+    po_id = upload.json()["id"]
     run_extraction(db, po_id, provider=FakeExtractionProvider(), settings=settings)
     detail = client.get(f"/api/po/{po_id}").json()
     confirmed = client.post(

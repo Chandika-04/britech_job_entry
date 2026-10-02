@@ -122,13 +122,13 @@ def test_migration_moves_existing_pdfs_to_files(tmp_path, monkeypatch):
         conn.execute(
             sa.text(
                 "INSERT INTO po_request (id, status, review_state, warnings, created_at, updated_at) "
-                "VALUES ('11111111111111111111111111111111', 'extracted', 'unreviewed', '[]', '2026-03-05 10:00:00', '2026-03-05 10:00:00')"
+                "VALUES (1, 'extracted', 'unreviewed', '[]', '2026-03-05 10:00:00', '2026-03-05 10:00:00')"
             )
         )
         conn.execute(
             sa.text(
                 "INSERT INTO po_attachment (id, po_request_id, filename, content_type, pdf_bytes, page_count) "
-                "VALUES ('22222222222222222222222222222222', '11111111111111111111111111111111', 'po.pdf', 'application/pdf', :data, 1)"
+                "VALUES (2, 1, 'po.pdf', 'application/pdf', :data, 1)"
             ),
             {"data": data},
         )
@@ -139,7 +139,7 @@ def test_migration_moves_existing_pdfs_to_files(tmp_path, monkeypatch):
         columns = {col["name"] for col in sa.inspect(conn).get_columns("po_attachment")}
     engine.dispose()
     assert "pdf_bytes" not in columns
-    assert row.storage_path == "2026/03/11111111-1111-1111-1111-111111111111.pdf"
+    assert row.storage_path == "2026/03/1.pdf"
     assert row.size_bytes == len(data)
-    assert (tmp_path / "migrated-pdfs" / "2026" / "03" / "11111111-1111-1111-1111-111111111111.pdf").read_bytes() == data
+    assert (tmp_path / "migrated-pdfs" / "2026" / "03" / "1.pdf").read_bytes() == data
     get_settings.cache_clear()

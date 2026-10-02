@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
-from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -16,19 +15,26 @@ from app.models.po_request import PoRequest, ReviewState
 from app.services.extraction.warnings import refresh_duplicate_warnings
 from app.services.shopkeeper.matching import MatchResult, match_customer, normalize
 from app.services.shopkeeper.provider import ShopKeeperProvider, get_shopkeeper_provider
-from app.services.shopkeeper.types import CustomerRecord, JobWritePayload, PartRecord
+from app.services.shopkeeper.types import CustomerRecord, JobWritePayload, PartRecord, ShipLine, ShipWritePayload
 from app.services.units import normalize_unit
 
-_LINE_LOCKS: dict[UUID, threading.Lock] = {}
+_LINE_LOCKS: dict[int, threading.Lock] = {}
 _LINE_LOCKS_GUARD = threading.Lock()
+_PO_LOCKS: dict[int, threading.Lock] = {}
+_PO_LOCKS_GUARD = threading.Lock()
 
 
-def _line_lock(line_id: UUID) -> threading.Lock:
+def _line_lock(line_id: int) -> threading.Lock:
     with _LINE_LOCKS_GUARD:
         return _LINE_LOCKS.setdefault(line_id, threading.Lock())
 
 
-def get_line(po: PoRequest, line_id: UUID) -> PoLineItem:
+def _po_lock(po_id: int) -> threading.Lock:
+    with _PO_LOCKS_GUARD:
+        return _PO_LOCKS.setdefault(po_id, threading.Lock())
+
+
+def get_line(po: PoRequest, line_id: int) -> PoLineItem:
     for item in po.line_items:
         if item.id == line_id:
             return item
@@ -549,3 +555,135 @@ def _mark_recovered(
         result={"jobs": recovered},
         database_name=database_name,
     )
+
+
+def _jobs_complete(po: PoRequest) -> bool:
+    lines = list(po.line_items)
+    return bool(lines) and all(line.erp_status == "created" and line.erp_job_number for line in lines)
+
+
+def _created_lines_in_order(po: PoRequest) -> list[PoLineItem]:
+    return sorted(
+        [line for line in po.line_items if line.erp_status == "created" and line.erp_job_number],
+        key=lambda line: (line.line_number is None, line.line_number or 0),
+    )
+
+
+def _try_recover_shipper(provider: ShopKeeperProvider, job_numbers: list[str]) -> str | None:
+    try:
+        return provider.find_shipper_for_jobs(job_numbers)
+    except Exception:
+        return None
+
+
+def create_shipper_for_po(
+    db: Session,
+    po: PoRequest,
+    provider: ShopKeeperProvider | None = None,
+) -> PoRequest:
+    provider = provider or get_shopkeeper_provider()
+    lock = _po_lock(po.id)
+    if not lock.acquire(blocking=False):
+        raise ConflictError("A shipper create is already in progress for this PO.")
+
+    try:
+        db.refresh(po)
+        if po.review_state != ReviewState.confirmed:
+            raise ConflictError("PO must be confirmed before creating a shipper.")
+        if not _jobs_complete(po):
+            raise ConflictError("Every line must have a created ShopKeeper job before creating a shipper.")
+        if po.shipper_number:
+            raise ConflictError(f"This PO already has shipper {po.shipper_number}.")
+
+        database_name = provider.current_database()
+        lines = _created_lines_in_order(po)
+        job_numbers = [line.erp_job_number or "" for line in lines]
+
+        recovered = provider.find_shipper_for_jobs(job_numbers)
+        if recovered:
+            po.shipper_number = recovered
+            _write_audit(
+                db,
+                po,
+                None,
+                "recover_shipper",
+                "success",
+                recovered,
+                result={"shipper_number": recovered, "jobs": job_numbers},
+                database_name=database_name,
+            )
+            return po
+
+        customer_code = lines[0].resolved_customer_code or ""
+        customer = provider.get_customer(customer_code) if customer_code else None
+        payload = ShipWritePayload(
+            ship_via=customer.shipped_via if customer else None,
+            ship_by=customer.salesman if customer else None,
+            ship_date=date.today(),
+            lines=[
+                ShipLine(job_number=line.erp_job_number or "", quantity=_positive_int_quantity(line))
+                for line in lines
+            ],
+        )
+        request = {
+            "ship_via": payload.ship_via,
+            "ship_by": payload.ship_by,
+            "ship_date": payload.ship_date.isoformat(),
+            "jobs": [{"job_number": line.job_number, "quantity": line.quantity} for line in payload.lines],
+        }
+        _write_audit(db, po, None, "attempt_shipper", "started", request=request, database_name=database_name)
+        db.flush()
+
+        try:
+            ship_number = provider.create_shipper(payload)
+            po.shipper_number = ship_number
+            _write_audit(
+                db,
+                po,
+                None,
+                "create_shipper",
+                "success",
+                ship_number,
+                request,
+                {"shipper_number": ship_number},
+                database_name=database_name,
+            )
+            return po
+        except AppError as exc:
+            recovered = _try_recover_shipper(provider, job_numbers)
+            if recovered:
+                po.shipper_number = recovered
+                _write_audit(
+                    db,
+                    po,
+                    None,
+                    "recover_shipper",
+                    "success",
+                    recovered,
+                    result={"shipper_number": recovered, "jobs": job_numbers},
+                    database_name=database_name,
+                )
+                return po
+            _write_audit(
+                db, po, None, "create_shipper", "failed", error=exc.message, database_name=database_name
+            )
+            raise
+        except Exception as exc:
+            recovered = _try_recover_shipper(provider, job_numbers)
+            if recovered:
+                po.shipper_number = recovered
+                _write_audit(
+                    db,
+                    po,
+                    None,
+                    "recover_shipper",
+                    "success",
+                    recovered,
+                    result={"shipper_number": recovered, "jobs": job_numbers},
+                    database_name=database_name,
+                )
+                return po
+            _write_audit(db, po, None, "create_shipper", "failed", error=str(exc), database_name=database_name)
+            raise AppError(f"ShopKeeper shipper create failed: {exc}", status_code=502) from exc
+    finally:
+        lock.release()

@@ -19,16 +19,19 @@ Open the app in a browser on the warehouse PC, or on a phone on the shop Wi-Fi, 
 ## 1. Uploading a PO
 
 1. Click **Upload PO** in the top-right corner, or open the **Upload** tab.
-2. Drag the PDF into the box, or click the box to choose a file.
+2. Drag one or more PDFs into the box, or click the box to choose files. **Each file is a separate PO.**
 3. Click **Upload and extract**.
 
 **Tips**
 
-- **Paper POs:** scan them with Genius Scan, Adobe Scan or Microsoft Lens and save the result as a PDF.
-- **Limits:** PDF only, up to **15 MB** and **10 pages**.
-- **Multi-page POs:** upload all the pages in one PDF. If you upload only page 1 of a multi-page PO, the app warns you that lines may be missing.
+- **Paper POs:** scan them with Genius Scan, Adobe Scan, or Microsoft Lens and save **one PDF per PO**.
+- **Several POs at once:** select or drop all the PDFs together. Extraction runs in the background. After more than one uploads, the Purchase Orders list opens so you can review them as they finish.
+- **One PO:** after upload, that PO's review page opens.
+- If a file fails, the ones that worked are kept. The failed names stay on the upload page so you can retry.
+- **Limits:** PDF only, up to **15 MB** and **10 pages** per file.
+- **Multi-page POs:** put all pages of the same PO in one PDF. If you upload only page 1 of a multi-page PO, the app warns you that lines may be missing.
 
-After you upload, the review page opens with the message *"Extracting purchase-order information…"*. This usually takes 5 to 15 seconds, and the page updates by itself when it's done.
+A single upload usually takes a few seconds to appear, then 5 to 15 seconds to extract. The review page (or the list, for a batch) updates by itself when extraction is done.
 
 ---
 
@@ -45,9 +48,12 @@ This tab lists every PO that has been uploaded.
 | **Extraction** | **Extracting**: still reading the PDF. **Extracted**: ready to review. **Failed**: couldn't be read (open it to retry). |
 | **Review** | **Unreviewed**: someone still needs to check it. **Confirmed**: checked and approved. |
 | **Jobs** | **Complete**: every line has a ShopKeeper job. **Incomplete**: at least one line doesn't, including lines you skipped. The number shows jobs created out of total lines, for example `4/6`. |
+| **Shipper** | Empty until every job is created. Then **Create shipper** makes one ShopKeeper shipper for all jobs on that PO and shows the ship number. Clicking the button does not open the PO. |
 | **Flags** | **Duplicate**: this PO number was already entered for the same ShopKeeper customer. **Stale**: extraction seems stuck. **N warn**: the number of review warnings. |
 
 **Search and sort:** type a PO number or customer name and press **Enter** (or click **Search**). Use the drop-down to sort by date, PO number, customer or status.
+
+The list updates by itself every few seconds while this tab is in front. If you switch away and come back, it refreshes immediately. It does not keep requesting in the background.
 
 ---
 
@@ -62,6 +68,8 @@ The review page shows the **original PDF** on the left and the **fields the app 
 - The arrow-out-of-box icon opens the original PDF in a new browser tab.
 
 ### Warnings
+
+If a shipper already exists for this PO, a green **Shipper created** box appears above the warnings and shows the ShopKeeper shipper number.
 
 A yellow **Review warnings** box lists anything the app is unsure about. Examples are missing pages, handwriting it couldn't read, a missing quantity, or notes from the extraction such as "no unit price shown on this PO". Read these warnings before confirming.
 
@@ -106,7 +114,7 @@ Each line should match the PO exactly. **One line becomes one ShopKeeper job.**
 
 ## 4. Creating ShopKeeper jobs
 
-The **ShopKeeper jobs** section appears on the review page once extraction is finished. Jobs can only be created after the PO is **confirmed**.
+The **ShopKeeper jobs** section appears on the review page once extraction is finished. Jobs can only be created after the PO is **confirmed**. After every line has a ShopKeeper job, that card moves above **PO information** and **Line items** so the job numbers are at the top when you come back to the PO.
 
 ### Step 1: Match the customer
 
@@ -193,4 +201,4 @@ Sometimes a line can't be entered yet. For example, the part isn't in ShopKeeper
 4. **Confirm reviewed.**
 5. Match the customer (**Use**).
 6. For each line: **Find part**, then **Use**, then acknowledge any checks, then **Create job**.
-7. The dashboard shows **Complete**. Any skipped line needs follow-up.
+7. The dashboard shows **Complete**. Click **Create shipper** on that row for one shipper covering every job on the PO. Any skipped line needs follow-up.

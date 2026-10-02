@@ -1,7 +1,22 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Truck } from "lucide-react";
 
 import type { WarningItem } from "@/types/po";
 import { cn } from "@/lib/utils";
+
+export function ShipperCreatedBanner({ shipperNumber }: { shipperNumber: string | null }) {
+  if (!shipperNumber) return null;
+  return (
+    <div className="rounded-lg border border-l-4 border-emerald-200 border-l-emerald-500 bg-emerald-50 px-3 py-2 text-[13px] text-emerald-950">
+      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-emerald-800">
+        <Truck className="h-3.5 w-3.5" />
+        Shipper created
+      </div>
+      <p className="mt-1">
+        Shipper # <span className="font-mono font-semibold tabular-nums">{shipperNumber}</span>
+      </p>
+    </div>
+  );
+}
 
 export function WarningsBanner({ warnings }: { warnings: WarningItem[] }) {
   if (!warnings.length) return null;

@@ -8,7 +8,7 @@ import { LineItemsEditor } from "@/components/po/LineItemsEditor";
 import { ShopKeeperPanel } from "@/components/po/ShopKeeperPanel";
 import { PoHeaderForm } from "@/components/po/PoHeaderForm";
 import { ReviewBadge, StatusBadge } from "@/components/po/StatusBadge";
-import { WarningsBanner } from "@/components/po/WarningsBanner";
+import { ShipperCreatedBanner, WarningsBanner } from "@/components/po/WarningsBanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -165,32 +165,14 @@ export function ReviewPage() {
         </Notice>
       ) : null}
 
+      <ShipperCreatedBanner shipperNumber={po.shipper_number} />
       <WarningsBanner warnings={po.warnings} />
 
       <div className="grid gap-3 xl:grid-cols-[minmax(26rem,5fr)_minmax(0,7fr)]">
         <PdfViewer poId={po.id} pageCount={po.page_count ?? 1} />
-        <div className="min-w-0 space-y-3">
-          <Card>
-            <CardHeader>
-              <CardTitle>PO information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {draft ? (
-                <PoHeaderForm draft={draft} onChange={setDraft} disabled={disabled} />
-              ) : (
-                <p className="text-[13px] text-muted">Waiting for extraction.</p>
-              )}
-            </CardContent>
-          </Card>
-          <Card className="overflow-hidden">
-            <CardHeader className="flex items-baseline justify-between">
-              <CardTitle>Line items</CardTitle>
-              {draft ? <span className="font-mono text-xs text-muted tabular-nums">{draft.line_items.length}</span> : null}
-            </CardHeader>
-            {draft ? <LineItemsEditor draft={draft} onChange={setDraft} disabled={disabled} /> : null}
-          </Card>
+        <div className="flex min-w-0 flex-col gap-3">
           {po.status === "extracted" ? (
-            <Card className="min-w-0">
+            <Card className={cn("min-w-0", po.jobs_complete ? "order-1" : "order-3")}>
               <CardHeader>
                 <CardTitle>ShopKeeper jobs</CardTitle>
               </CardHeader>
@@ -205,6 +187,25 @@ export function ReviewPage() {
               />
             </Card>
           ) : null}
+          <Card className={po.jobs_complete ? "order-2" : "order-1"}>
+            <CardHeader>
+              <CardTitle>PO information</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {draft ? (
+                <PoHeaderForm draft={draft} onChange={setDraft} disabled={disabled} />
+              ) : (
+                <p className="text-[13px] text-muted">Waiting for extraction.</p>
+              )}
+            </CardContent>
+          </Card>
+          <Card className={cn("overflow-hidden", po.jobs_complete ? "order-3" : "order-2")}>
+            <CardHeader className="flex items-baseline justify-between">
+              <CardTitle>Line items</CardTitle>
+              {draft ? <span className="font-mono text-xs text-muted tabular-nums">{draft.line_items.length}</span> : null}
+            </CardHeader>
+            {draft ? <LineItemsEditor draft={draft} onChange={setDraft} disabled={disabled} /> : null}
+          </Card>
         </div>
       </div>
 

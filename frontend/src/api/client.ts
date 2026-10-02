@@ -72,50 +72,50 @@ export const api = {
   listPos(params: URLSearchParams) {
     return request<PoListResponse>(`/api/po?${params.toString()}`);
   },
-  getPo(id: string) {
+  getPo(id: number | string) {
     return request<PoDetail>(`/api/po/${id}`);
   },
   async upload(file: File) {
     const body = new FormData();
     body.append("file", file);
-    return request<{ id: string; status: string; message: string }>("/api/upload", {
+    return request<{ id: number; status: string; message: string }>("/api/upload", {
       method: "POST",
       body,
     });
   },
-  saveDraft(id: string, draft: PoDraft) {
+  saveDraft(id: number | string, draft: PoDraft) {
     return request<PoDetail>(`/api/po/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(draftToPayload(draft)),
     });
   },
-  review(id: string, action: "save_draft" | "confirm", draft: PoDraft) {
+  review(id: number | string, action: "save_draft" | "confirm", draft: PoDraft) {
     return request<PoDetail>(`/api/po/${id}/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, po: draftToPayload(draft) }),
     });
   },
-  reextract(id: string) {
-    return request<{ id: string; status: string; message: string }>(`/api/po/${id}/reextract`, {
+  reextract(id: number | string) {
+    return request<{ id: number; status: string; message: string }>(`/api/po/${id}/reextract`, {
       method: "POST",
     });
   },
-  deletePo(id: string) {
+  deletePo(id: number | string) {
     return request<{ message: string }>(`/api/po/${id}`, { method: "DELETE" });
   },
-  attachmentUrl(id: string) {
+  attachmentUrl(id: number | string) {
     return `${API_BASE}/api/po/${id}/attachment`;
   },
-  pageUrl(id: string, page: number) {
+  pageUrl(id: number | string, page: number) {
     return `${API_BASE}/api/po/${id}/attachment/page/${page}`;
   },
   lookupCustomers(query: string) {
     const params = new URLSearchParams({ q: query });
     return request<CustomerLookupResponse>(`/api/shopkeeper/customers?${params.toString()}`);
   },
-  suggestCustomer(poId: string) {
+  suggestCustomer(poId: number | string) {
     return request<CustomerSuggestion>(`/api/po/${poId}/customer-suggestion`);
   },
   lookupParts(partNumber: string, partRevision?: string) {
@@ -123,48 +123,51 @@ export const api = {
     if (partRevision) params.set("part_revision", partRevision);
     return request<PartLookupResponse>(`/api/shopkeeper/parts?${params.toString()}`);
   },
-  resolveCustomer(poId: string, lineId: string, customerNumber: string, applyToAllLines = true) {
+  resolveCustomer(poId: number | string, lineId: number | string, customerNumber: string, applyToAllLines = true) {
     return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/resolve-customer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ customer_number: customerNumber, apply_to_all_lines: applyToAllLines }),
     });
   },
-  resolvePart(poId: string, lineId: string, partNumber: string, partRevision: string) {
+  resolvePart(poId: number | string, lineId: number | string, partNumber: string, partRevision: string) {
     return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/resolve-part`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ part_number: partNumber, part_revision: partRevision }),
     });
   },
-  acknowledgeCreditHold(poId: string, lineId: string) {
+  acknowledgeCreditHold(poId: number | string, lineId: number | string) {
     return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/acknowledge-credit-hold`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ acknowledge: true }),
     });
   },
-  acknowledgeDuplicate(poId: string, lineId: string) {
+  acknowledgeDuplicate(poId: number | string, lineId: number | string) {
     return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/acknowledge-duplicate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ acknowledge: true }),
     });
   },
-  skipLine(poId: string, lineId: string, reason?: string) {
+  skipLine(poId: number | string, lineId: number | string, reason?: string) {
     return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/skip`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reason: reason || "Reviewer skipped ShopKeeper job creation." }),
     });
   },
-  createJob(poId: string, lineId: string) {
+  createJob(poId: number | string, lineId: number | string) {
     return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/create-job`, { method: "POST" });
   },
-  unskipLine(poId: string, lineId: string) {
+  createShipper(poId: number | string) {
+    return request<PoDetail>(`/api/po/${poId}/create-shipper`, { method: "POST" });
+  },
+  unskipLine(poId: number | string, lineId: number | string) {
     return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/unskip`, { method: "POST" });
   },
-  resetErp(poId: string, lineId: string, reason?: string) {
+  resetErp(poId: number | string, lineId: number | string, reason?: string) {
     return request<PoDetail>(`/api/po/${poId}/lines/${lineId}/reset-erp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

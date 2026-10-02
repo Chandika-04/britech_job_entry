@@ -97,7 +97,7 @@ class PdfStorage:
         self,
         db: Session,
         *,
-        po_request_id: uuid.UUID,
+        po_request_id: int,
         filename: str,
         content_type: str,
         pdf_bytes: bytes,
@@ -119,7 +119,7 @@ class PdfStorage:
         db.flush()
         return attachment
 
-    def get_by_po(self, db: Session, po_request_id: uuid.UUID) -> PoAttachment | None:
+    def get_by_po(self, db: Session, po_request_id: int) -> PoAttachment | None:
         return (
             db.query(PoAttachment)
             .filter(PoAttachment.po_request_id == po_request_id)

@@ -1,5 +1,3 @@
-from uuid import UUID
-
 from sqlalchemy.orm import Session
 
 from app.models.po_line_item import PoLineItem
@@ -15,7 +13,7 @@ def find_duplicate_pos(
     *,
     customer_codes: set[str],
     po_number: str | None,
-    exclude_id: UUID | None = None,
+    exclude_id: int | None = None,
 ) -> list[PoRequest]:
     if not customer_codes or not po_number:
         return []
@@ -38,7 +36,7 @@ def duplicate_warnings(
     *,
     customer_codes: set[str],
     po_number: str | None,
-    exclude_id: UUID | None = None,
+    exclude_id: int | None = None,
 ) -> list[WarningItem]:
     matches = find_duplicate_pos(
         db,
@@ -86,7 +84,7 @@ def build_warnings(
     db: Session,
     extraction: ExtractionResult,
     *,
-    exclude_id: UUID | None = None,
+    exclude_id: int | None = None,
 ) -> list[WarningItem]:
     warnings: list[WarningItem] = []
 

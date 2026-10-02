@@ -1,5 +1,4 @@
 from decimal import Decimal
-from uuid import UUID
 
 import pytest
 
@@ -226,7 +225,7 @@ def test_skip_and_admin_reset(db, settings):
 
 def test_lookup_and_create_via_api(client, db, settings):
     upload = client.post("/api/upload", files=pdf_upload("po.pdf", make_text_pdf()))
-    po_id = UUID(upload.json()["id"])
+    po_id = upload.json()["id"]
     run_extraction(db, po_id, provider=FakeExtractionProvider(), settings=settings)
     detail = client.get(f"/api/po/{po_id}").json()
     line_id = detail["line_items"][0]["id"]
@@ -277,3 +276,107 @@ def test_lookup_and_create_via_api(client, db, settings):
 
     again = client.post(f"/api/po/{po_id}/lines/{line_id}/create-job")
     assert again.status_code == 409
+
+
+def _ready_all_lines(db, settings, fake):
+    po, _ = _ready_line(db, settings, fake=fake)
+    for line in po.line_items:
+        if not line.resolved_part_number:
+            resolve_part(db, po, line, "SUB-BEC-12352-0016", "A", fake)
+    db.commit()
+    db.refresh(po)
+    return po
+
+
+def _create_all_jobs(db, po, fake):
+    for line in po.line_items:
+        create_job_for_line(db, po, line, fake)
+    db.commit()
+    db.refresh(po)
+    return po
+
+
+def test_create_shipper_for_two_created_jobs(db, settings):
+    fake = FakeShopKeeper.reset_shared()
+    po = _create_all_jobs(db, _ready_all_lines(db, settings, fake), fake)
+    assert len(po.line_items) == 2
+    assert all(line.erp_status == "created" for line in po.line_items)
+
+    from app.services.shopkeeper.writer import create_shipper_for_po
+
+    po = create_shipper_for_po(db, po, fake)
+    db.commit()
+    db.refresh(po)
+    assert po.shipper_number == "500001"
+    assert fake.reserved_ship_numbers == ["500001"]
+    assert fake.shippers == [("500001", ["200001", "200002"])]
+    assert fake.last_ship_payload is not None
+    assert fake.last_ship_payload.ship_via == "UPS"
+    assert fake.last_ship_payload.ship_by == "Jane Sales"
+    assert [line.job_number for line in fake.last_ship_payload.lines] == ["200001", "200002"]
+    assert [line.quantity for line in fake.last_ship_payload.lines] == [25, 10]
+    audits = db.query(ErpWriteAudit).filter_by(po_id=po.id).all()
+    assert {row.action for row in audits} >= {"attempt_shipper", "create_shipper"}
+
+
+def test_create_shipper_rejects_second_click(db, settings):
+    fake = FakeShopKeeper.reset_shared()
+    po = _create_all_jobs(db, _ready_all_lines(db, settings, fake), fake)
+    from app.services.shopkeeper.writer import create_shipper_for_po
+
+    create_shipper_for_po(db, po, fake)
+    db.commit()
+    db.refresh(po)
+    with pytest.raises(ConflictError, match="already has shipper"):
+        create_shipper_for_po(db, po, fake)
+    assert fake.next_ship == 500002
+
+
+def test_create_shipper_rejects_incomplete_po(db, settings):
+    fake = FakeShopKeeper.reset_shared()
+    po, line = _ready_line(db, settings, fake=fake)
+    create_job_for_line(db, po, line, fake)
+    db.commit()
+    db.refresh(po)
+    from app.services.shopkeeper.writer import create_shipper_for_po
+
+    with pytest.raises(ConflictError, match="Every line must have a created"):
+        create_shipper_for_po(db, po, fake)
+    assert po.shipper_number is None
+    assert fake.shippers == []
+
+
+def test_create_shipper_recovers_after_commit_failure(db, settings):
+    fake = FakeShopKeeper.reset_shared()
+    po = _create_all_jobs(db, _ready_all_lines(db, settings, fake), fake)
+    from app.services.shopkeeper.writer import create_shipper_for_po
+
+    fake.fail_after_commit = True
+    po = create_shipper_for_po(db, po, fake)
+    db.commit()
+    db.refresh(po)
+    assert po.shipper_number == "500001"
+    audits = db.query(ErpWriteAudit).filter_by(po_id=po.id, action="recover_shipper").all()
+    assert len(audits) == 1
+
+
+def test_create_shipper_via_api(client, db, settings):
+    fake = FakeShopKeeper.reset_shared()
+    po = _create_all_jobs(db, _ready_all_lines(db, settings, fake), fake)
+    po_id = po.id
+    created = client.post(f"/api/po/{po_id}/create-shipper")
+    assert created.status_code == 200
+    assert created.json()["shipper_number"] == "500001"
+    listed = client.get("/api/po").json()["items"]
+    match = next(item for item in listed if item["id"] == po_id)
+    assert match["shipper_number"] == "500001"
+    again = client.post(f"/api/po/{po_id}/create-shipper")
+    assert again.status_code == 409
+
+
+def test_format_ship_number_pads_when_format_is_zeros():
+    from app.services.shopkeeper.sqlserver import _format_ship_number
+
+    assert _format_ship_number(12, "S", "000000", None) == "S000012"
+    assert _format_ship_number(12, None, None, None) == "12"
+    assert _format_ship_number(12, "A", None, "X") == "A12X"

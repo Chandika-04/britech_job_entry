@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Search } from "lucide-react";
 
@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { JobsBadge, ReviewBadge, StatusBadge } from "@/components/po/StatusBadge";
-import { formatDateTime } from "@/lib/utils";
-import type { PoListResponse } from "@/types/po";
+import { formatDate } from "@/lib/utils";
+import type { PoListResponse, PoSummary } from "@/types/po";
+
+const LIST_POLL_MS = 5000;
 
 export function DashboardPage() {
   const [params, setParams] = useSearchParams();
@@ -18,6 +20,7 @@ export function DashboardPage() {
   const [data, setData] = useState<PoListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [shippingId, setShippingId] = useState<number | null>(null);
 
   const query = params.get("q") ?? "";
   const sort = params.get("sort") ?? "created_at";
@@ -26,13 +29,16 @@ export function DashboardPage() {
 
   const requestKey = useMemo(() => params.toString(), [params]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const reload = useCallback(() => {
     const search = new URLSearchParams(params);
     if (!search.get("page_size")) search.set("page_size", "20");
+    return api.listPos(search);
+  }, [params]);
+
+  useEffect(() => {
+    let cancelled = false;
     setLoading(true);
-    api
-      .listPos(search)
+    reload()
       .then((result) => {
         if (!cancelled) {
           setData(result);
@@ -48,18 +54,52 @@ export function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [requestKey, params]);
+  }, [requestKey, reload]);
 
   useEffect(() => {
-    const hasPending = data?.items.some((item) => item.status === "pending");
-    if (!hasPending) return;
-    const timer = window.setInterval(() => {
-      const search = new URLSearchParams(params);
-      search.set("page_size", "20");
-      api.listPos(search).then(setData).catch(() => undefined);
-    }, 3000);
-    return () => window.clearInterval(timer);
-  }, [data, params]);
+    let cancelled = false;
+    let timer: number | null = null;
+
+    const refresh = () => {
+      reload()
+        .then((result) => {
+          if (!cancelled) {
+            setData(result);
+            setError(null);
+          }
+        })
+        .catch(() => undefined);
+    };
+
+    const stop = () => {
+      if (timer != null) {
+        window.clearInterval(timer);
+        timer = null;
+      }
+    };
+
+    const start = () => {
+      if (timer != null) return;
+      timer = window.setInterval(refresh, LIST_POLL_MS);
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+        start();
+      } else {
+        stop();
+      }
+    };
+
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [reload]);
 
   const updateParam = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -67,6 +107,23 @@ export function DashboardPage() {
     else next.delete(key);
     if (key !== "page") next.set("page", "1");
     setParams(next);
+  };
+
+  const createShipper = async (event: MouseEvent, item: PoSummary) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!window.confirm("Create one shipper for all jobs on this PO?")) return;
+    setShippingId(item.id);
+    try {
+      await api.createShipper(item.id);
+      const result = await reload();
+      setData(result);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create shipper.");
+    } finally {
+      setShippingId(null);
+    }
   };
 
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
@@ -135,6 +192,7 @@ export function DashboardPage() {
                   <th>Extraction</th>
                   <th>Review</th>
                   <th>Jobs</th>
+                  <th>Shipper</th>
                   <th>Flags</th>
                 </tr>
               </thead>
@@ -151,7 +209,7 @@ export function DashboardPage() {
                       </Link>
                     </td>
                     <td className="max-w-[320px] truncate">{item.customer_name || <span className="text-faint">Pending</span>}</td>
-                    <td className="whitespace-nowrap font-mono text-muted tabular-nums">{formatDateTime(item.created_at)}</td>
+                    <td className="whitespace-nowrap font-mono text-muted tabular-nums">{formatDate(item.created_at)}</td>
                     <td className="num text-muted">{item.page_count ?? "—"}</td>
                     <td>
                       <StatusBadge status={item.status} />
@@ -166,6 +224,9 @@ export function DashboardPage() {
                           {item.jobs_created_count}/{item.line_count}
                         </span>
                       </div>
+                    </td>
+                    <td onClick={(event) => event.stopPropagation()}>
+                      <ShipperCell item={item} shippingId={shippingId} onCreate={createShipper} />
                     </td>
                     <td>
                       <div className="flex gap-1">
@@ -184,11 +245,11 @@ export function DashboardPage() {
 
           <ul className="divide-y divide-rule-soft md:hidden">
             {data.items.map((item) => (
-              <li key={item.id}>
-                <Link to={`/po/${item.id}`} className="flex flex-col gap-1.5 px-4 py-3 active:bg-accent-soft/60">
+              <li key={item.id} className="px-4 py-3">
+                <Link to={`/po/${item.id}`} className="flex flex-col gap-1.5 active:bg-accent-soft/60">
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-mono font-semibold text-accent">{item.po_number || "PO # pending"}</span>
-                    <span className="font-mono text-xs text-muted">{formatDateTime(item.created_at)}</span>
+                    <span className="font-mono text-xs text-muted">{formatDate(item.created_at)}</span>
                   </div>
                   <span className="text-[13px]">{item.customer_name || "Customer pending"}</span>
                   <div className="flex flex-wrap gap-1">
@@ -199,6 +260,9 @@ export function DashboardPage() {
                     {item.is_stale ? <Badge variant="stale">Stale</Badge> : null}
                   </div>
                 </Link>
+                <div className="mt-2">
+                  <ShipperCell item={item} shippingId={shippingId} onCreate={createShipper} />
+                </div>
               </li>
             ))}
           </ul>
@@ -229,4 +293,32 @@ export function DashboardPage() {
       ) : null}
     </Card>
   );
+}
+
+function ShipperCell({
+  item,
+  shippingId,
+  onCreate,
+}: {
+  item: PoSummary;
+  shippingId: number | null;
+  onCreate: (event: MouseEvent, item: PoSummary) => void;
+}) {
+  if (item.shipper_number) {
+    return <span className="font-mono text-[13px] tabular-nums">{item.shipper_number}</span>;
+  }
+  if (item.jobs_complete) {
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={shippingId === item.id}
+        onClick={(event) => onCreate(event, item)}
+      >
+        {shippingId === item.id ? "Creating…" : "Create shipper"}
+      </Button>
+    );
+  }
+  return <span className="text-faint">—</span>;
 }

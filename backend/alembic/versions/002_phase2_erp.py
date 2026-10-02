@@ -33,9 +33,9 @@ def upgrade() -> None:
 
     op.create_table(
         "erp_write_audit",
-        sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("po_id", sa.Uuid(), nullable=False),
-        sa.Column("line_item_id", sa.Uuid(), nullable=True),
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("po_id", sa.Integer(), nullable=False),
+        sa.Column("line_item_id", sa.Integer(), nullable=True),
         sa.Column("job_number", sa.String(length=21), nullable=True),
         sa.Column("action", sa.String(length=32), nullable=False),
         sa.Column("status", sa.String(length=32), nullable=False),
@@ -47,7 +47,6 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         sa.ForeignKeyConstraint(["po_id"], ["po_request.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["line_item_id"], ["po_line_item.id"]),
-        sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_erp_write_audit_po_id", "erp_write_audit", ["po_id"])
     op.create_index("ix_erp_write_audit_line_item_id", "erp_write_audit", ["line_item_id"])

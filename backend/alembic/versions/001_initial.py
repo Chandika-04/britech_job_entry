@@ -19,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.create_table(
         "po_request",
-        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         sa.Column("status", sa.String(length=32), nullable=False),
@@ -36,7 +36,6 @@ def upgrade() -> None:
         sa.Column("ship_to", sa.Text(), nullable=True),
         sa.Column("extraction_error", sa.Text(), nullable=True),
         sa.Column("warnings", sa.JSON(), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_po_request_status", "po_request", ["status"])
     op.create_index("ix_po_request_review_state", "po_request", ["review_state"])
@@ -46,8 +45,8 @@ def upgrade() -> None:
 
     op.create_table(
         "po_line_item",
-        sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("po_request_id", sa.Uuid(), nullable=False),
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("po_request_id", sa.Integer(), nullable=False),
         sa.Column("line_number", sa.Integer(), nullable=True),
         sa.Column("customer_part_number", sa.String(length=128), nullable=True),
         sa.Column("revision", sa.String(length=64), nullable=True),
@@ -59,28 +58,26 @@ def upgrade() -> None:
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("reviewer_edited", sa.Boolean(), nullable=False),
         sa.ForeignKeyConstraint(["po_request_id"], ["po_request.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_po_line_item_po_request_id", "po_line_item", ["po_request_id"])
 
     op.create_table(
         "po_attachment",
-        sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("po_request_id", sa.Uuid(), nullable=False),
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("po_request_id", sa.Integer(), nullable=False),
         sa.Column("filename", sa.String(length=255), nullable=False),
         sa.Column("content_type", sa.String(length=128), nullable=False),
         sa.Column("pdf_bytes", sa.LargeBinary(), nullable=False),
         sa.Column("page_count", sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(["po_request_id"], ["po_request.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("po_request_id"),
     )
     op.create_index("ix_po_attachment_po_request_id", "po_attachment", ["po_request_id"], unique=True)
 
     op.create_table(
         "llm_call",
-        sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("po_request_id", sa.Uuid(), nullable=False),
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("po_request_id", sa.Integer(), nullable=False),
         sa.Column("model", sa.String(length=128), nullable=False),
         sa.Column("call_type", sa.String(length=32), nullable=False),
         sa.Column("input_tokens", sa.Integer(), nullable=True),
@@ -89,7 +86,6 @@ def upgrade() -> None:
         sa.Column("raw_extraction_json", sa.JSON(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         sa.ForeignKeyConstraint(["po_request_id"], ["po_request.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_llm_call_po_request_id", "llm_call", ["po_request_id"])
 

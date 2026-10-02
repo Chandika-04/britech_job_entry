@@ -1,7 +1,6 @@
-import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, Uuid, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import JSON
 
@@ -11,15 +10,15 @@ from app.database.base import Base
 class ErpWriteAudit(Base):
     __tablename__ = "erp_write_audit"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    po_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True),
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    po_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("po_request.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    line_item_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True),
+    line_item_id: Mapped[int | None] = mapped_column(
+        Integer,
         # No ON DELETE rule: SQL Server rejects a second cascade path through po_line_item.
         ForeignKey("po_line_item.id"),
         nullable=True,

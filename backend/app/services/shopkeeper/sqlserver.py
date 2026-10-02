@@ -4,7 +4,15 @@ from datetime import datetime
 
 from app.config import get_settings
 from app.exceptions import AppError
-from app.services.shopkeeper.types import CustomerRecord, JobWritePayload, PartRecord
+from app.services.shopkeeper.types import CustomerRecord, JobWritePayload, PartRecord, ShipWritePayload
+
+
+def _format_ship_number(next_num: int, prefix: str | None, fmt: str | None, suffix: str | None) -> str:
+    # references/job_entry_write_sequence.md step 12: Prefix + zero-pad when Format is zeros + Suffix
+    body = str(next_num)
+    if fmt and set(fmt) <= {"0"}:
+        body = body.zfill(len(fmt))
+    return f"{prefix or ''}{body}{suffix or ''}"
 
 CUSTOMER_SELECT = """
 SELECT [Customer Number], Company, [Customer Record Type], [Bill To Customer Number],
@@ -265,3 +273,134 @@ class SqlServerShopKeeper:
                 return f"{prefix or ''}{counter}"
             conn.rollback()
         raise RuntimeError("Could not reserve a ShopKeeper job number after retries.")
+
+    def find_shipper_for_jobs(self, job_numbers: list[str]) -> str | None:
+        if not job_numbers:
+            return None
+        conn, _ = self._connect()
+        try:
+            placeholders = ",".join("?" * len(job_numbers))
+            rows = conn.cursor().execute(
+                f"""
+                SELECT j.Jb_Job_Num, s.Sh_Ship_Num
+                FROM dbo.Jobs j
+                JOIN dbo.JobShip s ON s.Sh_Job_Num = j.Jb_Job_Num AND s.Sh_ReleaseInt = 1
+                WHERE j.Jb_Job_Num IN ({placeholders})
+                """,
+                *job_numbers,
+            ).fetchall()
+            by_job = {str(row[0]).strip(): (str(row[1]).strip() if row[1] else None) for row in rows}
+            found = [by_job.get(job) for job in job_numbers]
+            if any(not ship_num for ship_num in found):
+                return None
+            unique = set(found)
+            return unique.pop() if len(unique) == 1 else None
+        finally:
+            conn.close()
+
+    def create_shipper(self, payload: ShipWritePayload) -> str:
+        # SQL order: references/job_entry_write_sequence.md §5 steps 12–14.
+        conn, _ = self._connect()
+        try:
+            ship_num = self._reserve_ship_number(conn)
+            cur = conn.cursor()
+            now = datetime.now()
+            ship_date = datetime(
+                payload.ship_date.year, payload.ship_date.month, payload.ship_date.day
+            )
+            cur.execute(
+                "INSERT INTO dbo.LockInfo (Lk_Form, Lk_ID, Lk_Date, Lk_Initials, Lk_Comment) VALUES (?, ?, ?, ?, ?)",
+                "Jobs",
+                ship_num,
+                now,
+                "AUTO",
+                "Shipper via Automation",
+            )
+            cur.execute(
+                """INSERT INTO dbo.JobShipMaster (
+                       Jsm_Ship_Num, Jsm_Status, Jsm_ShipVia, Jsm_ShipBy, Jsm_ShipperPrinted
+                   ) VALUES (?, N'S', ?, ?, 0)""",
+                ship_num,
+                payload.ship_via,
+                payload.ship_by,
+            )
+            for line in payload.lines:
+                release_ts = cur.execute(
+                    "SELECT SSMA_TimeStamp FROM dbo.JobRelease WHERE Jr_JobNum = ? AND Jr_ReleaseNum = 1",
+                    line.job_number,
+                ).fetchone()
+                if not release_ts:
+                    raise RuntimeError(f"JobRelease not found for job {line.job_number} release 1.")
+                cur.execute(
+                    """UPDATE dbo.JobRelease
+                       SET Jr_Complete = 1, Jr_CloseDate = ?
+                       WHERE Jr_JobNum = ? AND Jr_ReleaseNum = 1 AND SSMA_TimeStamp = ?""",
+                    ship_date,
+                    line.job_number,
+                    release_ts[0],
+                )
+                if cur.rowcount != 1:
+                    raise RuntimeError(
+                        f"Step 14 JobRelease update matched 0 rows for job {line.job_number} (timestamp conflict)."
+                    )
+                ship_row = cur.execute(
+                    "SELECT Sh_ID, SSMA_TimeStamp FROM dbo.JobShip WHERE Sh_Job_Num = ? AND Sh_ReleaseInt = 1",
+                    line.job_number,
+                ).fetchone()
+                if not ship_row:
+                    raise RuntimeError(f"JobShip not found for job {line.job_number} release 1.")
+                cur.execute(
+                    """UPDATE dbo.JobShip
+                       SET Sh_Ship_Date = ?, Sh_Qty_Shipped = ?, Sh_Ship_Num = ?, Sh_Status = N'S'
+                       WHERE Sh_ID = ? AND SSMA_TimeStamp = ?""",
+                    ship_date,
+                    line.quantity,
+                    ship_num,
+                    ship_row[0],
+                    ship_row[1],
+                )
+                if cur.rowcount != 1:
+                    raise RuntimeError(
+                        f"Step 14 JobShip update matched 0 rows for job {line.job_number} (timestamp conflict)."
+                    )
+            conn.commit()
+            return ship_num
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def _reserve_ship_number(self, conn) -> str:
+        settings = get_settings()
+        cur = conn.cursor()
+        for _ in range(settings.shopkeeper_job_reserve_retries):
+            row = cur.execute(
+                "SELECT [Next Number], Prefix, Format, Suffix FROM dbo.SystemID WHERE Code = N'ShipNum'"
+            ).fetchone()
+            if not row:
+                raise RuntimeError("SystemID ShipNum row is missing.")
+            next_num, prefix, fmt, suffix = row
+            if next_num is None:
+                raise RuntimeError("SystemID ShipNum Next Number is NULL.")
+            cur.execute(
+                """UPDATE dbo.SystemID
+                   SET [Next Number] = ?
+                   WHERE Code = N'ShipNum' AND [Next Number] = ?
+                     AND (Prefix = ? OR (Prefix IS NULL AND ? IS NULL))
+                     AND (Format = ? OR (Format IS NULL AND ? IS NULL))
+                     AND (Suffix = ? OR (Suffix IS NULL AND ? IS NULL))""",
+                next_num + 1,
+                next_num,
+                prefix,
+                prefix,
+                fmt,
+                fmt,
+                suffix,
+                suffix,
+            )
+            if cur.rowcount == 1:
+                conn.commit()
+                return _format_ship_number(int(next_num), prefix, fmt, suffix)
+            conn.rollback()
+        raise RuntimeError("Could not reserve a ShopKeeper ship number after retries.")

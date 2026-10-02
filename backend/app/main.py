@@ -11,6 +11,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.routing import Match, Route
+from starlette.types import Scope
 
 from app.api import api_router
 from app.config import get_settings
@@ -83,15 +85,34 @@ def create_app() -> FastAPI:
         assets_dir = frontend_dist / "assets"
         if assets_dir.exists():
             app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
-
-        @app.get("/{full_path:path}")
-        async def serve_spa(full_path: str):
-            candidate = (frontend_dist / full_path).resolve()
-            if full_path and candidate.is_file() and str(candidate).startswith(str(frontend_dist.resolve())):
-                return FileResponse(candidate)
-            return FileResponse(frontend_dist / "index.html")
+        _mount_spa_fallback(app, frontend_dist)
 
     return app
+
+
+class _SpaFallbackRoute(Route):
+    """Serve the website for unknown GET paths, but never swallow /api routes."""
+
+    def matches(self, scope: Scope) -> tuple[Match, Scope]:
+        path = scope.get("path", "")
+        if path == "/api" or path.startswith("/api/"):
+            return Match.NONE, {}
+        return super().matches(scope)
+
+
+def _mount_spa_fallback(app: FastAPI, frontend_dist: Path) -> None:
+    dist_root = frontend_dist.resolve()
+
+    async def serve_spa(request: Request):
+        full_path = request.path_params.get("full_path", "")
+        candidate = (frontend_dist / full_path).resolve()
+        if full_path and candidate.is_file() and str(candidate).startswith(str(dist_root)):
+            return FileResponse(candidate)
+        return FileResponse(frontend_dist / "index.html")
+
+    app.router.routes.append(
+        _SpaFallbackRoute("/{full_path:path}", endpoint=serve_spa, methods=["GET", "HEAD"])
+    )
 
 
 app = create_app()

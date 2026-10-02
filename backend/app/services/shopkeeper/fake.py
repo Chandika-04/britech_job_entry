@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.config import get_settings
 from app.exceptions import AppError
-from app.services.shopkeeper.types import CustomerRecord, JobWritePayload, PartRecord
+from app.services.shopkeeper.types import CustomerRecord, JobWritePayload, PartRecord, ShipWritePayload
 
 
 class FakeShopKeeper:
@@ -11,8 +11,13 @@ class FakeShopKeeper:
     def __init__(self) -> None:
         self.database_name = "SkData_Test"
         self.next_job = 200001
+        self.next_ship = 500001
         self.jobs: list[tuple[str, str, str]] = []
         self.reserved_numbers: list[str] = []
+        self.reserved_ship_numbers: list[str] = []
+        self.job_to_ship: dict[str, str] = {}
+        self.shippers: list[tuple[str, list[str]]] = []
+        self.last_ship_payload: ShipWritePayload | None = None
         self.fail_connect = False
         self.fail_step: str | None = None
         self.fail_after_commit = False
@@ -218,3 +223,30 @@ class FakeShopKeeper:
         if self.fail_after_commit:
             raise RuntimeError("Failed after ShopKeeper commit")
         return job_num
+
+    def find_shipper_for_jobs(self, job_numbers: list[str]) -> str | None:
+        self.current_database()
+        if not job_numbers:
+            return None
+        found = [self.job_to_ship.get(job) for job in job_numbers]
+        if any(not ship_num for ship_num in found):
+            return None
+        unique = set(found)
+        return unique.pop() if len(unique) == 1 else None
+
+    def create_shipper(self, payload: ShipWritePayload) -> str:
+        self.current_database()
+        if self.fail_step == "ship_reserve":
+            raise RuntimeError("Forced failure at ship_reserve")
+        ship_num = str(self.next_ship)
+        self.next_ship += 1
+        self.reserved_ship_numbers.append(ship_num)
+        if self.fail_step in {"ship_lock", "ship_master", "ship_attach"}:
+            raise RuntimeError(f"Forced failure at {self.fail_step}")
+        for line in payload.lines:
+            self.job_to_ship[line.job_number] = ship_num
+        self.shippers.append((ship_num, [line.job_number for line in payload.lines]))
+        self.last_ship_payload = payload
+        if self.fail_after_commit:
+            raise RuntimeError("Failed after ShopKeeper commit")
+        return ship_num

@@ -1,9 +1,8 @@
 import enum
-import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Date, DateTime, Enum, String, Text, Uuid, func
+from sqlalchemy import JSON, Date, DateTime, Enum, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -28,7 +27,7 @@ class ReviewState(str, enum.Enum):
 class PoRequest(Base):
     __tablename__ = "po_request"
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -69,6 +68,7 @@ class PoRequest(Base):
 
     extraction_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     warnings: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    shipper_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     line_items: Mapped[list["PoLineItem"]] = relationship(
         back_populates="po_request",
