@@ -1,12 +1,13 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { MessageSquareText, Plus, Trash2 } from "lucide-react";
 
+import { PartMatchSection } from "@/components/po/PartMatch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
-import type { LineItemDraft, PoDraft } from "@/types/po";
+import { cn, focusNextEmpty, formatUsd } from "@/lib/utils";
+import type { LineItem, LineItemDraft, PartCandidate, PoDetail, PoDraft } from "@/types/po";
 
 const UNITS = ["Each", "Lot"] as const;
 
@@ -35,11 +36,13 @@ interface Props {
   draft: PoDraft;
   onChange: (draft: PoDraft) => void;
   disabled?: boolean;
+  po?: PoDetail;
+  onUsePart?: (index: number, part: PartCandidate) => void | Promise<void>;
 }
 
 type UpdateItem = (index: number, field: keyof LineItemDraft, value: string) => void;
 
-export function LineItemsEditor({ draft, onChange, disabled }: Props) {
+export function LineItemsEditor({ draft, onChange, disabled, po, onUsePart }: Props) {
   const updateItem: UpdateItem = (index, field, value) => {
     const line_items = draft.line_items.map((item, itemIndex) =>
       itemIndex === index ? { ...item, [field]: value } : item,
@@ -67,8 +70,22 @@ export function LineItemsEditor({ draft, onChange, disabled }: Props) {
         <p className="px-4 py-6 text-[13px] text-muted">No line items yet.</p>
       ) : (
         <>
-          <LineItemsTable items={draft.line_items} disabled={disabled} onUpdate={updateItem} onRemove={removeItem} />
-          <LineItemsStack items={draft.line_items} disabled={disabled} onUpdate={updateItem} onRemove={removeItem} />
+          <LineItemsTable
+            items={draft.line_items}
+            disabled={disabled}
+            po={po}
+            onUpdate={updateItem}
+            onRemove={removeItem}
+            onUsePart={onUsePart}
+          />
+          <LineItemsStack
+            items={draft.line_items}
+            disabled={disabled}
+            po={po}
+            onUpdate={updateItem}
+            onRemove={removeItem}
+            onUsePart={onUsePart}
+          />
         </>
       )}
       <div className="border-t border-rule-soft px-4 py-2">
@@ -84,11 +101,47 @@ export function LineItemsEditor({ draft, onChange, disabled }: Props) {
 interface ListProps {
   items: LineItemDraft[];
   disabled?: boolean;
+  po?: PoDetail;
   onUpdate: UpdateItem;
   onRemove: (index: number) => void;
+  onUsePart?: (index: number, part: PartCandidate) => void | Promise<void>;
 }
 
-function LineItemsTable({ items, disabled, onUpdate, onRemove }: ListProps) {
+function lineForItem(po: PoDetail | undefined, item: LineItemDraft): LineItem | undefined {
+  return item.id != null ? po?.line_items.find((row) => row.id === item.id) : undefined;
+}
+
+function LinePartMatch({
+  item,
+  index,
+  line,
+  disabled,
+  onUsePart,
+}: {
+  item: LineItemDraft;
+  index: number;
+  line?: LineItem;
+  disabled?: boolean;
+  onUsePart?: (index: number, part: PartCandidate) => void | Promise<void>;
+}) {
+  if (!onUsePart) return null;
+  const locked = line?.erp_status === "created" || line?.erp_status === "creating";
+  return (
+    <PartMatchSection
+      initialPartNumber={item.customer_part_number}
+      initialRevision={item.revision}
+      selectedPartNumber={line?.resolved_part_number}
+      selectedRevision={line?.resolved_part_revision}
+      selectedPmLinkId={line?.resolved_pm_linkid}
+      disabled={disabled || locked}
+      lineIndex={index}
+      onUse={(part) => onUsePart(index, part)}
+      onAfterUse={() => focusNextEmpty([`qty-line-${index}`, `price-line-${index}`, `due-line-${index}`])}
+    />
+  );
+}
+
+function LineItemsTable({ items, disabled, po, onUpdate, onRemove, onUsePart }: ListProps) {
   const [openNotes, setOpenNotes] = useState<Set<number>>(new Set());
 
   const toggleNotes = (index: number) => {
@@ -111,7 +164,7 @@ function LineItemsTable({ items, disabled, onUpdate, onRemove }: ListProps) {
             <th>Description</th>
             <th className="num w-20">Qty</th>
             <th className="w-20">Unit</th>
-            <th className="num w-24">Unit price</th>
+            <th className="num w-28">Unit price</th>
             <th className="w-36">Due</th>
             <th className="w-16" aria-label="Actions" />
           </tr>
@@ -119,9 +172,10 @@ function LineItemsTable({ items, disabled, onUpdate, onRemove }: ListProps) {
         <tbody>
           {items.map((item, index) => {
             const notesOpen = openNotes.has(index) || Boolean(item.notes);
+            const continued = notesOpen || Boolean(onUsePart);
             return (
               <Fragment key={item.id ?? `new-${index}`}>
-                <tr className={cn("hover:bg-head", notesOpen && "[&>td]:border-b-0")}>
+                <tr className={cn("hover:bg-head", continued && "[&>td]:border-b-0")}>
                   <td>
                     <input
                       className="cell-input font-mono tabular-nums"
@@ -161,6 +215,7 @@ function LineItemsTable({ items, disabled, onUpdate, onRemove }: ListProps) {
                   </td>
                   <td>
                     <input
+                      data-focus={`qty-line-${index}`}
                       className="cell-input text-right font-mono tabular-nums"
                       inputMode="decimal"
                       value={item.quantity}
@@ -186,16 +241,21 @@ function LineItemsTable({ items, disabled, onUpdate, onRemove }: ListProps) {
                   </td>
                   <td>
                     <input
+                      data-focus={`price-line-${index}`}
+                      data-money="usd"
                       className="cell-input text-right font-mono tabular-nums"
                       inputMode="decimal"
                       value={item.unit_price}
                       disabled={disabled}
                       aria-label="Unit price"
                       onChange={(event) => onUpdate(index, "unit_price", event.target.value)}
+                      onBlur={(event) => onUpdate(index, "unit_price", formatUsd(event.currentTarget.value))}
+                      onFocus={(event) => event.currentTarget.select()}
                     />
                   </td>
                   <td>
                     <input
+                      data-focus={`due-line-${index}`}
                       className="cell-input font-mono tabular-nums"
                       type="date"
                       value={item.due_date}
@@ -248,6 +308,20 @@ function LineItemsTable({ items, disabled, onUpdate, onRemove }: ListProps) {
                     </td>
                   </tr>
                 ) : null}
+                {onUsePart ? (
+                  <tr>
+                    <td />
+                    <td colSpan={8} className="pb-2">
+                      <LinePartMatch
+                        item={item}
+                        index={index}
+                        line={lineForItem(po, item)}
+                        disabled={disabled}
+                        onUsePart={onUsePart}
+                      />
+                    </td>
+                  </tr>
+                ) : null}
               </Fragment>
             );
           })}
@@ -257,7 +331,7 @@ function LineItemsTable({ items, disabled, onUpdate, onRemove }: ListProps) {
   );
 }
 
-function LineItemsStack({ items, disabled, onUpdate, onRemove }: ListProps) {
+function LineItemsStack({ items, disabled, po, onUpdate, onRemove, onUsePart }: ListProps) {
   return (
     <div className="divide-y divide-rule-soft md:hidden">
       {items.map((item, index) => (
@@ -297,18 +371,34 @@ function LineItemsStack({ items, disabled, onUpdate, onRemove }: ListProps) {
               <Input value={item.description} disabled={disabled} onChange={(event) => onUpdate(index, "description", event.target.value)} />
             </MobileField>
             <MobileField label="Qty">
-              <Input inputMode="decimal" value={item.quantity} disabled={disabled} onChange={(event) => onUpdate(index, "quantity", event.target.value)} />
+              <Input data-focus={`qty-line-${index}`} inputMode="decimal" value={item.quantity} disabled={disabled} onChange={(event) => onUpdate(index, "quantity", event.target.value)} />
             </MobileField>
             <MobileField label="Unit price">
-              <Input inputMode="decimal" value={item.unit_price} disabled={disabled} onChange={(event) => onUpdate(index, "unit_price", event.target.value)} />
+              <Input
+                data-focus={`price-line-${index}`}
+                data-money="usd"
+                inputMode="decimal"
+                value={item.unit_price}
+                disabled={disabled}
+                onChange={(event) => onUpdate(index, "unit_price", event.target.value)}
+                onBlur={(event) => onUpdate(index, "unit_price", formatUsd(event.currentTarget.value))}
+                onFocus={(event) => event.currentTarget.select()}
+              />
             </MobileField>
             <MobileField label="Due" wide>
-              <Input type="date" value={item.due_date} disabled={disabled} onChange={(event) => onUpdate(index, "due_date", event.target.value)} />
+              <Input data-focus={`due-line-${index}`} type="date" value={item.due_date} disabled={disabled} onChange={(event) => onUpdate(index, "due_date", event.target.value)} />
             </MobileField>
             <MobileField label="Notes" wide>
               <Textarea value={item.notes} disabled={disabled} onChange={(event) => onUpdate(index, "notes", event.target.value)} />
             </MobileField>
           </div>
+          <LinePartMatch
+            item={item}
+            index={index}
+            line={lineForItem(po, item)}
+            disabled={disabled}
+            onUsePart={onUsePart}
+          />
         </div>
       ))}
     </div>

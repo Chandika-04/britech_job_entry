@@ -2,7 +2,7 @@
 
 Manufacturing purchase-order extraction, human review, and ShopKeeper job creation.
 
-The application accepts a scanned or digital PO PDF, extracts structured job information with Claude vision, and lets a reviewer correct and confirm the result. After confirmation, the reviewer matches an existing ShopKeeper customer and part, then creates one job per PO line. It never creates customers or parts, and it never edits or deletes jobs after they are written.
+The application accepts a scanned or digital PO PDF, extracts structured job information with Claude vision, and lets a reviewer correct and confirm the result. After confirmation, the reviewer matches an existing ShopKeeper customer and part, then creates one job per PO line. New parts are created from the Parts tab. It never creates customers. Job header fields and operations can be edited on the job page.
 
 - **Using the app:** [docs/user_manual.md](docs/user_manual.md)
 - **Installing on the warehouse PC:** [docs/warehouse_pc_setup.md](docs/warehouse_pc_setup.md)
@@ -69,7 +69,7 @@ Automated tests use `FakeExtractionProvider`, `FakeShopKeeper`, and temporary SQ
 
 1. Scan a paper PO to PDF and upload it.
 2. The app extracts the header and line items. Each line's due date is set to today, and its unit to **Each** or **Lot**.
-3. Review the original PDF next to the extracted fields, fix anything wrong, then **Confirm reviewed**.
+3. Review the original PDF next to the extracted fields, fix anything wrong, then click **PO is correct**.
 4. Match the ShopKeeper bill-to customer and, for each line, the exact part and revision. The reviewer must pick each match.
 5. Create one ShopKeeper job per line (or skip the line). A person then finishes routing and shipping in ShopKeeper.
 6. If a confirmed PO is edited later, it returns to **unreviewed**.

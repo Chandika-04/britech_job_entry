@@ -1,6 +1,6 @@
 # Shipping (steps 12–14)
 
-**Status:** Implemented (create shipper only). Printing is out of scope for now.
+**Status:** Implemented (create shipper on the work list, plus a **Shippers** tab to look up existing ShopKeeper shippers). Printing is out of scope until an example packing-slip / shipper PDF is in [`references/`](../references/) (same folder as traveler and certification samples).
 
 **SQL source of truth:** [`references/job_entry_write_sequence.md`](../references/job_entry_write_sequence.md) §5 (Shipping) and the step table at the end of that file. Use that document whenever column names, `SystemID` concurrency, `SSMA_TimeStamp` updates, or the loop over releases are unclear. Also see [`references/table_schema.md`](../references/table_schema.md) (`SystemID`, `JobShipMaster`, `JobShip`, `JobRelease`) and the ship phase in [`references/shopkeeper_job_entry_outline.md`](../references/shopkeeper_job_entry_outline.md).
 
@@ -14,15 +14,16 @@ This is ShopKeeper steps **12–14** only (reserve ship number, insert `JobShipM
 
 ## UI
 
-**Where:** Purchase Orders dashboard, on each PO row (desktop table and the phone list).
+**Where:** Work list, on each PO row (desktop table and the phone list). **Shippers** tab lists ShopKeeper `JobShipMaster` rows (search by shipper #, PO, job, or customer) and opens a shipper to show its jobs. No add-job picker on that tab.
 
-**Create shipper button**
+**Create shipper / Add to shipper**
 
-- Visible and enabled only when `jobs_complete` is true **and** this PO has no shipper number yet.
+- **Create shipper** is visible when `jobs_complete` is true **and** this PO has no shipper number yet. The operator must have **Prepared by** initials in the header (this browser). If they are missing, the app asks for them before creating the shipper. **Add to shipper** does not change `Jsm_ShipBy`.
+- **Add to shipper** is visible when `jobs_complete` is true **and** this PO already has a shipper number. Use it after a job is created later (for example a missed line). It attaches leftover jobs to the existing ship number and does **not** reserve a second shipper. Highlight the button (accent/blue filled) when at least one created job is not yet on that shipper (`shipper_needs_attach`); keep the outline style when every job is already attached.
 - Hidden or disabled while jobs are incomplete (including any skipped line — skipped means not created, so the PO stays Incomplete).
 - Clicking the button must **not** open the review page (stop the row’s navigation).
-- Confirm copy along the lines of: create one shipper for all jobs on this PO?
-- While it runs, disable the button. On success, show the new ship number on that row. On failure, show the error and leave the button available to retry.
+- Confirm copy along the lines of: create one shipper for all jobs on this PO? / add remaining jobs to shipper N?
+- While it runs, disable the button. On success, show the ship number on that row. On failure, show the error and leave the button available to retry.
 
 **Shipper # column (or cell on the phone list)**
 
@@ -30,7 +31,7 @@ This is ShopKeeper steps **12–14** only (reserve ship number, insert `JobShipM
 - After success, show the ShopKeeper ship number (monospace), same idea as job # on the review page.
 - Store that number on the PO in **this** app’s database so the dashboard can load it without querying ShopKeeper for every row.
 
-**Idempotent:** one shipper per PO. If the PO already has a shipper number, do not create another. If a previous attempt wrote ShopKeeper but the save here failed, recover by looking up existing `JobShip.Sh_Ship_Num` for those job numbers (same idea as job-create recover).
+**Idempotent:** one shipper per PO. If the PO already has a shipper number, do not mint another. Attach any created jobs whose `JobShip.Sh_Ship_Num` is still empty to that existing number. If a previous attempt wrote ShopKeeper but the save here failed, recover by looking up existing `JobShip.Sh_Ship_Num` for those job numbers (same idea as job-create recover).
 
 ## What “all jobs on this PO” means
 
@@ -50,7 +51,7 @@ Keep ship-number reserve **outside** the rest of the transaction and commit it i
    `Code = 'ShipNum'`. Read `[Next Number]`, Prefix, Format, Suffix. Update `[Next Number] = @Next + 1` matching those columns, using `IS NULL` safe compares. Format the ship number as Prefix + (zero-pad to Format length when Format is zeros) + Suffix. Retry a few times if two people reserve at once.
 
 2. **Step 13 — `JobShipMaster` INSERT**
-   Required: `Jsm_Ship_Num`. Set `Jsm_ShipVia` from the ShopKeeper customer `shipped_via` already stored on the lines. Set `Jsm_ShipBy` from `salesman`.
+   Required: `Jsm_Ship_Num`. Set `Jsm_ShipVia` from the ShopKeeper customer `shipped_via` already stored on the lines. Set `Jsm_ShipBy` from the operator’s **Prepared by** initials (required to create a shipper; stored in this browser until they change them). Do **not** copy customer `salesman` into `Jsm_ShipBy`.
    `Jsm_Status = 'S'`. `Jsm_ShipperPrinted = 0`.
 
 3. **Step 14 — for each job on the PO**
@@ -71,7 +72,8 @@ Keep ship-number reserve **outside** the rest of the transaction and commit it i
 
 - PO extracted and confirmed.
 - `jobs_complete` (every line `erp_status = created` with a job number).
-- No shipper number on the PO yet (unless recovering a half-finished write).
+- **Prepared by** initials on a new shipper (`Jsm_ShipBy`). Not required to attach leftover jobs.
+- No shipper number on the PO yet (unless recovering a half-finished write, or attaching leftover jobs to the existing shipper).
 - Same ShopKeeper database check as job create (`DB_NAME()` must match `SHOPKEEPER_EXPECTED_DATABASE`).
 
 **ShopKeeper holds (do not block v1)**
@@ -81,11 +83,11 @@ The real ShopKeeper ship screen checks quality/FA/ship/credit holds, incomplete 
 
 If step 13/14 fails after a ship number was reserved, leave that number unused (acceptable, same as skipped job numbers). Do not write a `JobShipMaster` without attaching every job. If some jobs were updated and others were not, fail loudly and do not save a shipper number on the PO — operator retries or fixes in ShopKeeper.
 
-Never edit or delete an existing ShopKeeper shipper from this app.
+Do not void or replace an existing ShopKeeper shipper from this app. You may attach a later job’s `JobShip` / `JobRelease` rows to the PO’s existing ship number. Saving job details after a confirm (when that job is already on a shipper) updates that job’s `Sh_Qty_Due` and `Sh_Qty_Shipped` to the new quantity.
 
 ## Tests
 
-Fake ShopKeeper: given a PO with two created jobs, create-shipper reserves one ship number, inserts one master, updates both jobs’ ship lines, stores the number on the PO. Second click is rejected. Incomplete PO (one line not created) is rejected. Tests do not call Access or build a PDF.
+Fake ShopKeeper: given a PO with two created jobs, create-shipper reserves one ship number, inserts one master, updates both jobs’ ship lines, stores the number on the PO. Second click when every job is already on that shipper is a no-op (same ship number, no new reserve). Incomplete PO (one line not created) is rejected. Adding a line after the shipper exists, creating that job, then create-shipper again attaches the leftover job to the same shipper. Tests do not call Access or build a PDF.
 
 ## Out of scope
 
@@ -95,13 +97,10 @@ Fake ShopKeeper: given a PO with two created jobs, create-shipper reserves one s
 - Creating customers or parts
 - Live ShopKeeper database until `SHOPKEEPER_EXPECTED_DATABASE` is changed on purpose
 
-<!--
-## Printing (later — not this phase)
+## Printing (later)
 
-Rebuild a packing-slip PDF from a ShopKeeper Print-to-PDF or scan, filled from
-Jobs / Customers / JobShip / JobShipMaster. After the PDF is written, set
-Jsm_ShipperPrinted = 1 (step 15). Do not use Access COM (compiled front-end).
+Rebuild a packing-slip PDF in this app and print it to the **saved warehouse printer** (same as traveler/cert). Layout follows the shipper example PDF in [`references/`](../references/) (for example `example_shipper.pdf`). All print samples live in `references/` only — never `docs/`.
 
-Until this section is implemented, shipper documents are produced in ShopKeeper
-by a person if the floor still needs paper.
--->
+After a successful print, set `Jsm_ShipperPrinted = 1` (step 15). Do not use Access COM.
+
+Until that example file is in `references/` and this section is implemented, shipper documents are produced in ShopKeeper by a person if the floor still needs paper.

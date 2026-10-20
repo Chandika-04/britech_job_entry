@@ -14,6 +14,7 @@
   --color-accent: #1f54c9;
   --color-accent-hover: #1a47ab;
   --color-accent-soft: #e8eefb;
+  --color-card-header: #6b90b3;
 }
 
 :root {
@@ -80,6 +81,26 @@ textarea {
     border-bottom: 0;
   }
 
+  .data-table tbody tr.pick-row {
+    cursor: pointer;
+  }
+
+  .data-table tbody tr.pick-row:hover td {
+    background: rgb(31 84 201 / 0.06);
+  }
+
+  .data-table tbody tr.pick-row.is-selected td {
+    background: rgb(16 185 129 / 0.08);
+  }
+
+  .data-table tbody tr.pick-row.is-disabled {
+    cursor: default;
+  }
+
+  .data-table tbody tr.pick-row.is-disabled:hover td {
+    background: transparent;
+  }
+
   .data-table .num {
     text-align: right;
     font-family: var(--font-mono);
@@ -103,6 +124,48 @@ textarea {
     white-space: normal;
     overflow-wrap: anywhere;
     vertical-align: top;
+  }
+
+  .data-table.sheet {
+    min-width: 860px;
+    border-collapse: collapse;
+    background: #fff;
+  }
+
+  .data-table.sheet th,
+  .data-table.sheet td {
+    border: 1px solid var(--color-rule);
+    padding: 0;
+    vertical-align: middle;
+    background: #fff;
+    overflow: hidden;
+    cursor: text;
+  }
+
+  .data-table.sheet td:has(input[type="checkbox"]),
+  .data-table.sheet td:has(button) {
+    cursor: default;
+    text-align: center;
+  }
+
+  .data-table.sheet th {
+    background: var(--color-head);
+    padding: 6px 8px;
+    position: sticky;
+    top: 0;
+  }
+
+  .data-table.sheet tbody tr:last-child td {
+    border-bottom: 1px solid var(--color-rule);
+  }
+
+  .data-table.sheet .cell-text {
+    display: block;
+    min-height: 28px;
+    padding: 6px 8px;
+    font-size: 13px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   .cell-input {
@@ -147,5 +210,26 @@ textarea {
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--color-faint);
+  }
+
+  .card-header {
+    background: var(--color-card-header);
+    color: #fff;
+  }
+
+  .card-header .text-muted {
+    color: rgb(255 255 255 / 0.85);
+  }
+
+  .card-header button {
+    border-color: rgb(255 255 255 / 0.4);
+    background: rgb(255 255 255 / 0.12);
+    color: #fff;
+  }
+
+  .card-header button:hover:not(:disabled) {
+    border-color: rgb(255 255 255 / 0.65);
+    background: rgb(255 255 255 / 0.22);
+    color: #fff;
   }
 }

@@ -7,7 +7,8 @@ Use embedded text as supporting evidence when it is present.
 ## Who is who
 Britech Electropolishing (any spelling, e.g. "Britech Electropolishing, Inc.", "BRITECH", or a garbled scan of it)
 is always the vendor/supplier receiving this PO, never the customer. The customer is the company that issued the PO
-(usually the letterhead, "Bill To", or buyer). Never put Britech in customer_name, bill_to, or ship_to.
+(usually the letterhead, "Bill To", or buyer). Never put Britech in customer_name, bill_to, or ship_to. If the vendor stated
+is not Britech leave warning.
 
 ## General rules
 - Never invent information. Do not guess part numbers, quantities, prices, or dates.

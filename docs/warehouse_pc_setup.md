@@ -107,6 +107,8 @@ EXTRACTION_PROVIDER=claude
 SHOPKEEPER_PROVIDER=shopkeeper
 SHOPKEEPER_CONNECTION_STRING=<same value as on the development PC>
 SHOPKEEPER_EXPECTED_DATABASE=SkData_Test
+WAREHOUSE_PRINTER_NAME=
+PART_PHOTOS_DIR=\\DISKSTATION\PartPhotos
 
 CORS_ORIGINS=
 ```
@@ -118,9 +120,8 @@ Notes:
   from File Explorer's address bar), or leave it blank to skip the backup copy for now.
 - In `SHOPKEEPER_CONNECTION_STRING`, the driver must be one installed on this PC:
   `DRIVER={ODBC Driver 17 for SQL Server}`.
-- `SHOPKEEPER_EXPECTED_DATABASE=SkData_Test` keeps job creation pointed at the ShopKeeper
-  **test** database. Change it (and the connection string) only when you are ready to
-  create real jobs.
+- `WAREHOUSE_PRINTER_NAME` is unused. Traveler and certification print use the browser print dialog so you can choose a printer.
+- `PART_PHOTOS_DIR` is the PartPhotos share used when linking a picture on the part editor.
 - This file holds secrets. It is ignored by git; never commit or share it.
 
 ## 8. First start (by hand)

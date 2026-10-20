@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Body, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -8,6 +8,7 @@ from app.schemas.po import MessageResponse, PoDetail, PoListResponse, PoUpdate, 
 from app.services.pdf.processor import open_pdf, render_page_png
 from app.services.po_service import (
     confirm_reviewed,
+    create_manual,
     delete_po,
     get_po,
     list_pos,
@@ -48,6 +49,14 @@ def list_purchase_orders(
         page=page,
         page_size=page_size,
     )
+
+
+@router.post("/manual", response_model=PoDetail)
+def create_manual_purchase_order(
+    db: Session = Depends(get_db),
+    payload: PoUpdate | None = Body(default=None),
+) -> PoDetail:
+    return to_detail(create_manual(db, payload))
 
 
 @router.get("/{po_id}", response_model=PoDetail)

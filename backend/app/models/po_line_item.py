@@ -41,6 +41,7 @@ class PoLineItem(Base):
     resolved_part_revision: Mapped[str | None] = mapped_column(String(5), nullable=True)
     resolved_pm_linkid: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    cert_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     customer_credit_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     credit_hold_acknowledged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     duplicate_job_numbers: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
@@ -48,8 +49,10 @@ class PoLineItem(Base):
 
     erp_status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     erp_job_number: Mapped[str | None] = mapped_column(String(21), nullable=True)
+    erp_shipper_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
     erp_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     erp_failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     erp_database: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    erp_traveler_printed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     po_request: Mapped["PoRequest"] = relationship(back_populates="line_items")

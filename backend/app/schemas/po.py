@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
-from app.models.po_request import PoStatus, ReviewState
+from app.models.po_request import PoSource, PoStatus, ReviewState
 from app.schemas.extraction import WarningItem
 
 
@@ -47,15 +47,18 @@ class LineItemOut(BaseModel):
     resolved_part_number: str | None = None
     resolved_part_revision: str | None = None
     resolved_pm_linkid: int | None = None
+    cert_required: bool = False
     customer_credit_hold: bool = False
     credit_hold_acknowledged: bool = False
     duplicate_job_numbers: list[str] = Field(default_factory=list)
     duplicate_acknowledged: bool = False
     erp_status: str = "pending"
     erp_job_number: str | None = None
+    erp_shipper_number: str | None = None
     erp_created_at: UtcDatetime | None = None
     erp_failure_reason: str | None = None
     erp_database: str | None = None
+    erp_traveler_printed: bool = False
 
 
 class PoUpdate(BaseModel):
@@ -95,6 +98,7 @@ class PoSummary(BaseModel):
     updated_at: UtcDatetime
     status: PoStatus
     review_state: ReviewState
+    source: PoSource = PoSource.upload
     po_number: str | None = None
     customer_name: str | None = None
     warnings: list[WarningItem] = Field(default_factory=list)
@@ -105,6 +109,7 @@ class PoSummary(BaseModel):
     jobs_created_count: int = 0
     jobs_complete: bool = False
     shipper_number: str | None = None
+    shipper_needs_attach: bool = False
 
 
 class PoDetail(PoSummary):

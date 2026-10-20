@@ -10,6 +10,7 @@ interface Props {
   draft: PoDraft;
   onChange: (draft: PoDraft) => void;
   disabled?: boolean;
+  compact?: boolean;
 }
 
 function Field({
@@ -38,14 +39,35 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-export function PoHeaderForm({ draft, onChange, disabled }: Props) {
+export function PoHeaderForm({ draft, onChange, disabled, compact }: Props) {
   const set = (field: keyof PoDraft, value: string) => onChange({ ...draft, [field]: value });
+
+  const addresses = (
+      <Group title="Addresses & notes">
+        <Field label="Bill to" className="col-span-2">
+          <Textarea className="min-h-16" value={draft.bill_to} disabled={disabled} onChange={(event) => set("bill_to", event.target.value)} />
+        </Field>
+        <Field label="Ship to" className="col-span-2">
+          <Textarea className="min-h-16" value={draft.ship_to} disabled={disabled} onChange={(event) => set("ship_to", event.target.value)} />
+        </Field>
+        <Field label="Buyer notes" className="col-span-2 lg:col-span-4">
+          <Textarea className="min-h-14" value={draft.buyer_notes} disabled={disabled} onChange={(event) => set("buyer_notes", event.target.value)} />
+        </Field>
+      </Group>
+  );
 
   return (
     <div className="space-y-4">
       <Group title="Order">
         <Field label="PO number">
-          <Input className="font-mono" value={draft.po_number} disabled={disabled} onChange={(event) => set("po_number", event.target.value)} />
+          <Input
+            id="po-number"
+            data-focus="po-number"
+            className="font-mono"
+            value={draft.po_number}
+            disabled={disabled}
+            onChange={(event) => set("po_number", event.target.value)}
+          />
         </Field>
         <Field label="Order date">
           <Input className="font-mono" type="date" value={draft.order_date} disabled={disabled} onChange={(event) => set("order_date", event.target.value)} />
@@ -70,17 +92,14 @@ export function PoHeaderForm({ draft, onChange, disabled }: Props) {
         </Field>
       </Group>
 
-      <Group title="Addresses & notes">
-        <Field label="Bill to" className="col-span-2">
-          <Textarea className="min-h-16" value={draft.bill_to} disabled={disabled} onChange={(event) => set("bill_to", event.target.value)} />
-        </Field>
-        <Field label="Ship to" className="col-span-2">
-          <Textarea className="min-h-16" value={draft.ship_to} disabled={disabled} onChange={(event) => set("ship_to", event.target.value)} />
-        </Field>
-        <Field label="Buyer notes" className="col-span-2 lg:col-span-4">
-          <Textarea className="min-h-14" value={draft.buyer_notes} disabled={disabled} onChange={(event) => set("buyer_notes", event.target.value)} />
-        </Field>
-      </Group>
+      {compact ? (
+        <details className="rounded-md border border-rule px-3 py-2">
+          <summary className="cursor-pointer text-[13px] font-semibold text-muted">Addresses and notes</summary>
+          <div className="mt-3">{addresses}</div>
+        </details>
+      ) : (
+        addresses
+      )}
     </div>
   );
 }

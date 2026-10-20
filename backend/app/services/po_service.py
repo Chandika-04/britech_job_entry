@@ -3,13 +3,13 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import Settings, get_settings
 from app.models.erp_write_audit import ErpWriteAudit
 from app.models.po_line_item import PoLineItem
-from app.models.po_request import PoRequest, PoStatus, ReviewState
+from app.models.po_request import PoRequest, PoSource, PoStatus, ReviewState
 from app.schemas.extraction import WarningItem
 from app.schemas.po import LineItemIn, PoDetail, PoSummary, PoUpdate
 from app.services.extraction.warnings import DUPLICATE_CODES, refresh_duplicate_warnings
@@ -58,16 +58,29 @@ def is_stale(po: PoRequest, settings: Settings | None = None) -> bool:
     return age > timedelta(seconds=settings.heartbeat_stale_seconds)
 
 
+def _shipper_needs_attach(po: PoRequest, jobs_complete: bool) -> bool:
+    if not po.shipper_number or not jobs_complete:
+        return False
+    return any(
+        line.erp_status == "created"
+        and line.erp_job_number
+        and (line.erp_shipper_number or "") != po.shipper_number
+        for line in po.line_items
+    )
+
+
 def to_summary(po: PoRequest, settings: Settings | None = None) -> PoSummary:
     warnings = _as_warnings(po.warnings)
     line_count = len(po.line_items)
     jobs_created_count = sum(1 for line in po.line_items if line.erp_status == "created")
+    jobs_complete = line_count > 0 and jobs_created_count == line_count
     return PoSummary(
         id=po.id,
         created_at=po.created_at,
         updated_at=po.updated_at,
         status=po.status,
         review_state=po.review_state,
+        source=po.source,
         po_number=po.po_number,
         customer_name=po.customer_name,
         warnings=warnings,
@@ -78,8 +91,9 @@ def to_summary(po: PoRequest, settings: Settings | None = None) -> PoSummary:
         page_count=po.attachment.page_count if po.attachment else None,
         line_count=line_count,
         jobs_created_count=jobs_created_count,
-        jobs_complete=line_count > 0 and jobs_created_count == line_count,
+        jobs_complete=jobs_complete,
         shipper_number=po.shipper_number,
+        shipper_needs_attach=_shipper_needs_attach(po, jobs_complete),
     )
 
 
@@ -113,6 +127,7 @@ def create_from_upload(
     po = PoRequest(
         status=PoStatus.pending,
         review_state=ReviewState.unreviewed,
+        source=PoSource.upload,
         warnings=[],
     )
     db.add(po)
@@ -131,6 +146,49 @@ def create_from_upload(
         db.rollback()
         pdf_storage.delete_files(attachment.storage_path)
         raise
+    db.refresh(po)
+    return po
+
+
+def create_manual(db: Session, payload: PoUpdate | None = None) -> PoRequest:
+    today = datetime.now(UTC).date()
+    po = PoRequest(
+        status=PoStatus.extracted,
+        review_state=ReviewState.unreviewed,
+        source=PoSource.manual,
+        order_date=today,
+        warnings=[],
+        line_items=[
+            PoLineItem(
+                line_number=1,
+                uom="Each",
+                due_date=today,
+                reviewer_edited=True,
+            )
+        ],
+    )
+    db.add(po)
+    if payload is not None:
+        db.flush()
+        has_lines = bool(payload.line_items)
+        has_header = any(getattr(payload, field) is not None for field in HEADER_FIELDS)
+        if has_lines:
+            apply_update(db, po, payload)
+        elif has_header:
+            for field in HEADER_FIELDS:
+                new_value = getattr(payload, field)
+                if getattr(po, field) != new_value:
+                    setattr(po, field, new_value)
+        if not po.line_items:
+            po.line_items.append(
+                PoLineItem(
+                    line_number=1,
+                    uom="Each",
+                    due_date=po.order_date or today,
+                    reviewer_edited=True,
+                )
+            )
+    db.commit()
     db.refresh(po)
     return po
 
@@ -167,19 +225,22 @@ def list_pos(
     if review_state:
         query = query.filter(PoRequest.review_state == review_state)
 
-    sort_map = {
-        "created_at": PoRequest.created_at,
-        "updated_at": PoRequest.updated_at,
-        "po_number": PoRequest.po_number,
-        "customer_name": PoRequest.customer_name,
-        "status": PoRequest.status,
-        "review_state": PoRequest.review_state,
-    }
-    sort_col = sort_map.get(sort, PoRequest.created_at)
-    if order.lower() == "asc":
-        query = query.order_by(sort_col.asc())
+    if sort == "queue":
+        query = _order_work_queue(db, query)
     else:
-        query = query.order_by(sort_col.desc())
+        sort_map = {
+            "created_at": PoRequest.created_at,
+            "updated_at": PoRequest.updated_at,
+            "po_number": PoRequest.po_number,
+            "customer_name": PoRequest.customer_name,
+            "status": PoRequest.status,
+            "review_state": PoRequest.review_state,
+        }
+        sort_col = sort_map.get(sort, PoRequest.created_at)
+        if order.lower() == "asc":
+            query = query.order_by(sort_col.asc())
+        else:
+            query = query.order_by(sort_col.desc())
 
     total = query.count()
     page = max(page, 1)
@@ -191,6 +252,46 @@ def list_pos(
         .all()
     )
     return items, total
+
+
+def _order_work_queue(db: Session, query):
+    stats = (
+        db.query(
+            PoLineItem.po_request_id.label("po_id"),
+            func.count(PoLineItem.id).label("line_count"),
+            func.coalesce(func.sum(case((PoLineItem.erp_status == "created", 1), else_=0)), 0).label("created_count"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                PoLineItem.erp_status == "created",
+                                or_(PoLineItem.erp_shipper_number.is_(None), PoLineItem.erp_shipper_number == ""),
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("unattached_count"),
+        )
+        .group_by(PoLineItem.po_request_id)
+        .subquery()
+    )
+    query = query.outerjoin(stats, stats.c.po_id == PoRequest.id)
+    jobs_open = or_(stats.c.line_count.is_(None), stats.c.line_count == 0, stats.c.created_count < stats.c.line_count)
+    no_shipper = or_(PoRequest.shipper_number.is_(None), PoRequest.shipper_number == "")
+    rank = case(
+        (PoRequest.status == PoStatus.failed, 0),
+        (PoRequest.status == PoStatus.pending, 1),
+        (PoRequest.review_state == ReviewState.unreviewed, 2),
+        (jobs_open, 3),
+        (no_shipper, 4),
+        (stats.c.unattached_count > 0, 5),
+        else_=6,
+    )
+    return query.order_by(rank.asc(), PoRequest.created_at.desc())
 
 
 def _line_item_changed(existing: PoLineItem | None, incoming: LineItemIn) -> bool:
@@ -207,6 +308,19 @@ def _line_item_changed(existing: PoLineItem | None, incoming: LineItemIn) -> boo
         or existing.due_date != incoming.due_date
         or (existing.notes or None) != (incoming.notes or None)
     )
+
+
+def _copy_resolved_customer(po: PoRequest, new_line: PoLineItem) -> None:
+    source = next((item for item in po.line_items if item.resolved_customer_code), None)
+    if source is None:
+        return
+    new_line.resolved_customer_code = source.resolved_customer_code
+    new_line.customer_credit_hold = source.customer_credit_hold
+    new_line.credit_hold_acknowledged = source.credit_hold_acknowledged
+    new_line.cert_required = source.cert_required
+    from app.services.shopkeeper.writer import find_duplicates
+
+    find_duplicates(po, new_line)
 
 
 def apply_update(db: Session, po: PoRequest, payload: PoUpdate) -> bool:
@@ -233,20 +347,20 @@ def apply_update(db: Session, po: PoRequest, payload: PoUpdate) -> bool:
     for incoming in payload.line_items:
         existing = existing_by_id.get(incoming.id) if incoming.id else None
         if existing is None:
-            po.line_items.append(
-                PoLineItem(
-                    line_number=incoming.line_number,
-                    customer_part_number=incoming.customer_part_number,
-                    revision=incoming.revision,
-                    description=incoming.description,
-                    quantity=incoming.quantity,
-                    unit_price=incoming.unit_price,
-                    uom=incoming.uom,
-                    due_date=incoming.due_date,
-                    notes=incoming.notes,
-                    reviewer_edited=True,
-                )
+            new_line = PoLineItem(
+                line_number=incoming.line_number,
+                customer_part_number=incoming.customer_part_number,
+                revision=incoming.revision,
+                description=incoming.description,
+                quantity=incoming.quantity,
+                unit_price=incoming.unit_price,
+                uom=incoming.uom,
+                due_date=incoming.due_date,
+                notes=incoming.notes,
+                reviewer_edited=True,
             )
+            _copy_resolved_customer(po, new_line)
+            po.line_items.append(new_line)
             changed = True
             continue
         if _line_item_changed(existing, incoming):
@@ -296,6 +410,8 @@ def confirm_reviewed(db: Session, po: PoRequest, payload: PoUpdate | None = None
 
 
 def queue_reextract(db: Session, po: PoRequest) -> PoRequest:
+    if po.source == PoSource.manual:
+        raise ConflictError("Manual entries have no PDF, so they cannot be re-extracted.")
     if po.attachment is None:
         raise ConflictError("The original PDF is missing, so this purchase order cannot be re-extracted.")
     po.status = PoStatus.pending

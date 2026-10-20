@@ -11,11 +11,11 @@ from app.exceptions import AppError, ConflictError, NotFoundError
 from app.models.customer_alias import CustomerAlias
 from app.models.erp_write_audit import ErpWriteAudit
 from app.models.po_line_item import PoLineItem
-from app.models.po_request import PoRequest, ReviewState
+from app.models.po_request import PoRequest, PoSource, ReviewState
 from app.services.extraction.warnings import refresh_duplicate_warnings
 from app.services.shopkeeper.matching import MatchResult, match_customer, normalize
 from app.services.shopkeeper.provider import ShopKeeperProvider, get_shopkeeper_provider
-from app.services.shopkeeper.types import CustomerRecord, JobWritePayload, PartRecord, ShipLine, ShipWritePayload
+from app.services.shopkeeper.types import CustomerRecord, JobWritePayload, PartRecord, PriceQuote, ShipLine, ShipWritePayload
 from app.services.units import normalize_unit
 
 _LINE_LOCKS: dict[int, threading.Lock] = {}
@@ -95,6 +95,13 @@ def _candidate_customer(row: CustomerRecord) -> dict:
         "cert_default": row.cert_default,
         "taxable_default": row.taxable_default,
         "tax_code": row.tax_code,
+        "street": row.street,
+        "suite": row.suite,
+        "city": row.city,
+        "state": row.state,
+        "postal_code": row.postal_code,
+        "country": row.country,
+        "address_block": row.address_block(),
     }
 
 
@@ -196,13 +203,30 @@ def lookup_parts(part_number: str, part_revision: str | None = None, provider: S
     }
 
 
+def lookup_prices(
+    customer_number: str,
+    part_number: str,
+    part_revision: str,
+    quantity: int | None = None,
+    provider: ShopKeeperProvider | None = None,
+) -> list[PriceQuote]:
+    provider = provider or get_shopkeeper_provider()
+    return provider.lookup_prices(customer_number, part_number, part_revision, quantity)
+
+
 def find_duplicates(po: PoRequest, line: PoLineItem, provider: ShopKeeperProvider | None = None) -> list[str]:
     provider = provider or get_shopkeeper_provider()
-    if not po.po_number or line.line_number is None:
-        return []
-    jobs = provider.find_jobs_by_po_line(po.po_number, _line_no(line))
+    previous = list(line.duplicate_job_numbers or [])
+    if not po.po_number or not line.resolved_customer_code or not line.resolved_part_number:
+        jobs: list[str] = []
+    else:
+        jobs = provider.find_duplicate_jobs(
+            po.po_number.strip(),
+            line.resolved_customer_code,
+            line.resolved_part_number,
+        )
     line.duplicate_job_numbers = jobs
-    if not jobs:
+    if jobs != previous:
         line.duplicate_acknowledged = False
     return jobs
 
@@ -255,8 +279,14 @@ def resolve_customer(
         item.resolved_customer_code = customer.customer_number
         item.customer_credit_hold = customer.credit_hold
         item.credit_hold_acknowledged = False
+        item.cert_required = customer.cert_default
         find_duplicates(po, item, provider)
         refresh_line_status(item, po)
+    if po.source == PoSource.manual:
+        po.customer_name = (customer.company or "").strip() or customer.customer_number
+        po.bill_to = customer.address_block() or None
+        ships = provider.lookup_ship_tos(customer.customer_number)
+        po.ship_to = (ships[0].address_block() if len(ships) == 1 else customer.address_block()) or None
     save_customer_alias(db, po, customer.customer_number)
     refresh_duplicate_warnings(db, po)
     return targets
@@ -279,8 +309,32 @@ def resolve_part(
     line.resolved_part_number = part.part_number
     line.resolved_part_revision = part.part_revision
     line.resolved_pm_linkid = part.pm_linkid
+    if po.source == PoSource.manual:
+        line.customer_part_number = part.part_number
+        line.revision = part.part_revision
+        line.description = part.description
+        line.reviewer_edited = True
+    find_duplicates(po, line, provider)
     refresh_line_status(line, po)
     return line
+
+
+def set_cert_required(
+    po: PoRequest,
+    line: PoLineItem,
+    cert_required: bool,
+    apply_to_all: bool = False,
+) -> list[PoLineItem]:
+    targets = list(po.line_items) if apply_to_all else [line]
+    updated: list[PoLineItem] = []
+    for item in targets:
+        if item.erp_status in {"created", "creating"}:
+            if not apply_to_all:
+                raise ConflictError("Certificate cannot be changed after the ShopKeeper job is created.")
+            continue
+        item.cert_required = bool(cert_required)
+        updated.append(item)
+    return updated
 
 
 def acknowledge_credit_hold(line: PoLineItem, po: PoRequest, acknowledge: bool = True) -> PoLineItem:
@@ -327,12 +381,75 @@ def reset_erp(db: Session, po: PoRequest, line: PoLineItem, reason: str) -> PoLi
     previous = line.erp_job_number
     line.erp_status = "pending"
     line.erp_job_number = None
+    line.erp_shipper_number = None
     line.erp_created_at = None
     line.erp_failure_reason = None
     line.erp_database = None
+    line.erp_traveler_printed = False
     refresh_line_status(line, po)
     _write_audit(db, po, line, "reset", "success", job_number=previous, error=reason)
     return line
+
+
+def _line_for_job(db: Session, job_number: str) -> tuple[PoRequest, PoLineItem] | None:
+    line = db.query(PoLineItem).filter(PoLineItem.erp_job_number == job_number).first()
+    if line is None:
+        return None
+    return line.po_request, line
+
+
+def delete_shopkeeper_job(
+    db: Session,
+    job_number: str,
+    provider: ShopKeeperProvider | None = None,
+) -> PoLineItem | None:
+    provider = provider or get_shopkeeper_provider()
+    number = (job_number or "").strip()
+    if not number:
+        raise AppError("Job number is required.", status_code=409)
+    db.flush()
+    found = _line_for_job(db, number)
+    try:
+        database_name = provider.current_database()
+        provider.delete_job(number)
+    except AppError as exc:
+        if found is not None:
+            po, line = found
+            _write_audit(
+                db,
+                po,
+                line,
+                "delete_job",
+                "failed",
+                job_number=number,
+                error=exc.message,
+            )
+        raise
+    if found is None:
+        return None
+    po, line = found
+    _write_audit(
+        db,
+        po,
+        line,
+        "delete_job",
+        "success",
+        job_number=number,
+        database_name=database_name,
+    )
+    return reset_erp(db, po, line, f"Deleted ShopKeeper job {number}.")
+
+
+def delete_shopkeeper_job_for_line(
+    db: Session,
+    po: PoRequest,
+    line: PoLineItem,
+    provider: ShopKeeperProvider | None = None,
+) -> PoLineItem:
+    if line.erp_status != "created" or not line.erp_job_number:
+        raise ConflictError("This line has no ShopKeeper job to delete.")
+    deleted = delete_shopkeeper_job(db, line.erp_job_number, provider)
+    return deleted if deleted is not None else line
 
 
 def _positive_int_quantity(line: PoLineItem) -> int:
@@ -387,9 +504,10 @@ def _write_time_checks(
     if part is None:
         raise AppError("Resolved part/revision no longer exists or is inactive in ShopKeeper.", status_code=409)
 
+    find_duplicates(po, line, provider)
     if line.duplicate_job_numbers and not line.duplicate_acknowledged:
         raise AppError(
-            "A ShopKeeper job already exists for this PO line. Acknowledge before creating another.",
+            "A ShopKeeper job already exists for this customer, PO, and part. Acknowledge before creating another.",
             status_code=409,
         )
 
@@ -464,7 +582,7 @@ def create_job_for_line(
                 unit_price=unit_price,
                 unit=normalize_unit(line.uom),
                 due_date=line.due_date,
-                cert_required=customer.cert_default,
+                cert_required=line.cert_required,
                 taxable=taxable,
                 tax_code=tax_code,
                 status=settings.shopkeeper_new_job_status,
@@ -483,6 +601,7 @@ def create_job_for_line(
                 "quantity": payload.quantity,
                 "unit_price": str(payload.unit_price),
                 "unit": payload.unit,
+                "cert_required": payload.cert_required,
             }
             job_number = provider.create_job(payload)
             line.erp_status = "created"
@@ -576,10 +695,61 @@ def _try_recover_shipper(provider: ShopKeeperProvider, job_numbers: list[str]) -
         return None
 
 
+PREPARED_BY_MAX = 20
+
+
+def normalize_prepared_by(value: str | None) -> str | None:
+    text = "".join((value or "").split())
+    if not text:
+        return None
+    if len(text) > PREPARED_BY_MAX:
+        raise AppError("Prepared by initials must be 20 characters or fewer.")
+    if not all(ch.isalnum() or ch in ".-" for ch in text):
+        raise AppError("Prepared by initials can only include letters, numbers, periods, and hyphens.")
+    return text.upper()
+
+
+def _ship_payload(
+    provider: ShopKeeperProvider, lines: list[PoLineItem], *, ship_by: str | None = None
+) -> ShipWritePayload:
+    customer_code = lines[0].resolved_customer_code or ""
+    customer = provider.get_customer(customer_code) if customer_code else None
+    return ShipWritePayload(
+        ship_via=customer.shipped_via if customer else None,
+        ship_by=ship_by,
+        ship_date=date.today(),
+        lines=[
+            ShipLine(job_number=line.erp_job_number or "", quantity=_positive_int_quantity(line))
+            for line in lines
+        ],
+    )
+
+
+def _lines_missing_from_shipper(
+    provider: ShopKeeperProvider, ship_number: str, lines: list[PoLineItem]
+) -> list[PoLineItem]:
+    missing: list[PoLineItem] = []
+    for line in lines:
+        current = provider.find_shipper_for_jobs([line.erp_job_number or ""])
+        if current == ship_number:
+            continue
+        if current:
+            raise ConflictError(f"Job {line.erp_job_number} is already on shipper {current}.")
+        missing.append(line)
+    return missing
+
+
+def _mark_on_shipper(lines: list[PoLineItem], ship_number: str) -> None:
+    for line in lines:
+        line.erp_shipper_number = ship_number
+
+
 def create_shipper_for_po(
     db: Session,
     po: PoRequest,
     provider: ShopKeeperProvider | None = None,
+    *,
+    prepared_by: str | None = None,
 ) -> PoRequest:
     provider = provider or get_shopkeeper_provider()
     lock = _po_lock(po.id)
@@ -592,16 +762,56 @@ def create_shipper_for_po(
             raise ConflictError("PO must be confirmed before creating a shipper.")
         if not _jobs_complete(po):
             raise ConflictError("Every line must have a created ShopKeeper job before creating a shipper.")
-        if po.shipper_number:
-            raise ConflictError(f"This PO already has shipper {po.shipper_number}.")
 
         database_name = provider.current_database()
         lines = _created_lines_in_order(po)
         job_numbers = [line.erp_job_number or "" for line in lines]
 
+        if po.shipper_number:
+            missing = _lines_missing_from_shipper(provider, po.shipper_number, lines)
+            if not missing:
+                _mark_on_shipper(lines, po.shipper_number)
+                return po
+            payload = _ship_payload(provider, missing)
+            request = {
+                "shipper_number": po.shipper_number,
+                "ship_via": payload.ship_via,
+                "ship_by": payload.ship_by,
+                "ship_date": payload.ship_date.isoformat(),
+                "jobs": [{"job_number": line.job_number, "quantity": line.quantity} for line in payload.lines],
+            }
+            _write_audit(db, po, None, "attempt_shipper", "started", request=request, database_name=database_name)
+            db.flush()
+            try:
+                provider.add_jobs_to_shipper(po.shipper_number, payload)
+                _mark_on_shipper(missing, po.shipper_number)
+                _write_audit(
+                    db,
+                    po,
+                    None,
+                    "attach_shipper",
+                    "success",
+                    po.shipper_number,
+                    request,
+                    {"shipper_number": po.shipper_number, "jobs": [line.erp_job_number for line in missing]},
+                    database_name=database_name,
+                )
+                return po
+            except AppError as exc:
+                _write_audit(
+                    db, po, None, "attach_shipper", "failed", error=exc.message, database_name=database_name
+                )
+                raise
+            except Exception as exc:
+                _write_audit(
+                    db, po, None, "attach_shipper", "failed", error=str(exc), database_name=database_name
+                )
+                raise AppError(f"ShopKeeper shipper update failed: {exc}", status_code=502) from exc
+
         recovered = provider.find_shipper_for_jobs(job_numbers)
         if recovered:
             po.shipper_number = recovered
+            _mark_on_shipper(lines, recovered)
             _write_audit(
                 db,
                 po,
@@ -614,17 +824,10 @@ def create_shipper_for_po(
             )
             return po
 
-        customer_code = lines[0].resolved_customer_code or ""
-        customer = provider.get_customer(customer_code) if customer_code else None
-        payload = ShipWritePayload(
-            ship_via=customer.shipped_via if customer else None,
-            ship_by=customer.salesman if customer else None,
-            ship_date=date.today(),
-            lines=[
-                ShipLine(job_number=line.erp_job_number or "", quantity=_positive_int_quantity(line))
-                for line in lines
-            ],
-        )
+        initials = normalize_prepared_by(prepared_by)
+        if not initials:
+            raise AppError("Prepared by initials are required to create a shipper.")
+        payload = _ship_payload(provider, lines, ship_by=initials)
         request = {
             "ship_via": payload.ship_via,
             "ship_by": payload.ship_by,
@@ -637,6 +840,7 @@ def create_shipper_for_po(
         try:
             ship_number = provider.create_shipper(payload)
             po.shipper_number = ship_number
+            _mark_on_shipper(lines, ship_number)
             _write_audit(
                 db,
                 po,
@@ -653,6 +857,7 @@ def create_shipper_for_po(
             recovered = _try_recover_shipper(provider, job_numbers)
             if recovered:
                 po.shipper_number = recovered
+                _mark_on_shipper(lines, recovered)
                 _write_audit(
                     db,
                     po,
@@ -672,6 +877,7 @@ def create_shipper_for_po(
             recovered = _try_recover_shipper(provider, job_numbers)
             if recovered:
                 po.shipper_number = recovered
+                _mark_on_shipper(lines, recovered)
                 _write_audit(
                     db,
                     po,

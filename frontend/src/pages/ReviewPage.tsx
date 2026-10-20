@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "@/api/client";
 import { PdfViewer } from "@/components/pdf/PdfViewer";
@@ -11,8 +11,8 @@ import { ReviewBadge, StatusBadge } from "@/components/po/StatusBadge";
 import { ShipperCreatedBanner, WarningsBanner } from "@/components/po/WarningsBanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
-import type { LineItemDraft, PoDetail, PoDraft } from "@/types/po";
+import { cn, formatUsd, handleEnterAdvance } from "@/lib/utils";
+import type { LineItemDraft, PartCandidate, PoDetail, PoDraft } from "@/types/po";
 
 function asText(value: string | number | null | undefined): string {
   return value == null ? "" : String(value);
@@ -36,13 +36,27 @@ function toDraft(po: PoDetail): PoDraft {
         revision: asText(item.revision),
         description: asText(item.description),
         quantity: asText(item.quantity),
-        unit_price: asText(item.unit_price),
+        unit_price: formatUsd(item.unit_price),
         uom: item.uom === "Lot" ? "Lot" : "Each",
         due_date: asText(item.due_date),
         notes: asText(item.notes),
       }),
     ),
   };
+}
+
+function applyPart(draft: PoDraft, index: number, part: PartCandidate): PoDraft {
+  const line_items = draft.line_items.map((item, itemIndex) =>
+    itemIndex === index
+      ? {
+          ...item,
+          customer_part_number: part.part_number,
+          revision: part.part_revision,
+          description: part.description || "",
+        }
+      : item,
+  );
+  return { ...draft, line_items };
 }
 
 export function ReviewPage() {
@@ -85,9 +99,30 @@ export function ReviewPage() {
       const result = await api.review(id, action, draft);
       setPo(result);
       setDraft(toDraft(result));
-      setNotice(action === "confirm" ? "Marked as reviewed." : "Draft saved.");
+      setNotice(action === "confirm" ? "PO is marked correct. You can create jobs." : "Saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const usePart = async (index: number, part: PartCandidate) => {
+    setDraft((current) => (current ? applyPart(current, index, part) : current));
+    const item = draft?.line_items[index];
+    const line = item?.id != null ? po?.line_items.find((row) => row.id === item.id) : undefined;
+    if (!po || !line) {
+      setNotice(`Part ${part.part_number} rev ${part.part_revision} filled in.`);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.resolvePart(po.id, line.id, part.part_number, part.part_revision);
+      setPo(result);
+      setNotice(`Part ${part.part_number} rev ${part.part_revision} stored.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to store the ShopKeeper part.");
     } finally {
       setBusy(false);
     }
@@ -125,17 +160,20 @@ export function ReviewPage() {
   if (!po) {
     return <p className="text-[13px] text-muted">Loading…</p>;
   }
+  if (po.source === "manual") {
+    return <Navigate to={`/manual/${po.id}`} replace />;
+  }
 
   const lineCount = po.line_items.length;
   const createdCount = po.line_items.filter((line) => line.erp_status === "created").length;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 pb-2">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <Link to="/" className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline">
             <ArrowLeft className="h-3.5 w-3.5" />
-            Purchase orders
+            Work list
           </Link>
           <div className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h1 className="font-mono text-xl font-semibold">{po.po_number || "PO # pending"}</h1>
@@ -143,7 +181,7 @@ export function ReviewPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <StatusBadge status={po.status} />
+          <StatusBadge status={po.status} source={po.source} />
           <ReviewBadge state={po.review_state} />
           <span className="ml-1 font-mono text-xs text-muted tabular-nums">
             {lineCount} {lineCount === 1 ? "line" : "lines"} · {createdCount} jobs
@@ -160,8 +198,12 @@ export function ReviewPage() {
       {error ? <Notice tone="error">{error}</Notice> : null}
       {po.review_state === "confirmed" ? (
         <Notice tone="muted">
-          Confirmed. Resolve the ShopKeeper customer and part below, then create one job per line. Editing any stored PO field will
-          return this PO to unreviewed.
+          This PO is checked. Match the ShopKeeper customer and parts, then create jobs. Changing a saved field puts it back to
+          Needs check.
+        </Notice>
+      ) : po.status === "extracted" ? (
+        <Notice tone="info">
+          Check the PDF against the fields, then click <strong>PO is correct</strong>. After that you can create ShopKeeper jobs.
         </Notice>
       ) : null}
 
@@ -170,9 +212,9 @@ export function ReviewPage() {
 
       <div className="grid gap-3 xl:grid-cols-[minmax(26rem,5fr)_minmax(0,7fr)]">
         <PdfViewer poId={po.id} pageCount={po.page_count ?? 1} />
-        <div className="flex min-w-0 flex-col gap-3">
+        <div className="flex min-w-0 flex-col gap-3" data-enter-form onKeyDown={handleEnterAdvance}>
           {po.status === "extracted" ? (
-            <Card className={cn("min-w-0", po.jobs_complete ? "order-1" : "order-3")}>
+            <Card className={cn("min-w-0", po.review_state === "confirmed" || po.jobs_complete ? "order-1" : "order-3")}>
               <CardHeader>
                 <CardTitle>ShopKeeper jobs</CardTitle>
               </CardHeader>
@@ -187,7 +229,7 @@ export function ReviewPage() {
               />
             </Card>
           ) : null}
-          <Card className={po.jobs_complete ? "order-2" : "order-1"}>
+          <Card className={po.review_state === "confirmed" || po.jobs_complete ? "order-2" : "order-1"}>
             <CardHeader>
               <CardTitle>PO information</CardTitle>
             </CardHeader>
@@ -199,30 +241,42 @@ export function ReviewPage() {
               )}
             </CardContent>
           </Card>
-          <Card className={cn("overflow-hidden", po.jobs_complete ? "order-3" : "order-2")}>
+          <Card className={cn("overflow-hidden", po.review_state === "confirmed" || po.jobs_complete ? "order-3" : "order-2")}>
             <CardHeader className="flex items-baseline justify-between">
               <CardTitle>Line items</CardTitle>
               {draft ? <span className="font-mono text-xs text-muted tabular-nums">{draft.line_items.length}</span> : null}
             </CardHeader>
-            {draft ? <LineItemsEditor draft={draft} onChange={setDraft} disabled={disabled} /> : null}
+            {draft ? (
+              <LineItemsEditor
+                draft={draft}
+                onChange={setDraft}
+                disabled={disabled}
+                po={po}
+                onUsePart={usePart}
+              />
+            ) : null}
           </Card>
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-2 pb-16 text-xs">
+        <button type="button" className="text-muted hover:text-accent hover:underline disabled:opacity-40" disabled={busy} onClick={reextract}>
+          Read PDF again
+        </button>
+        <span className="text-faint">·</span>
+        <button type="button" className="text-red-700 hover:underline disabled:opacity-40" disabled={busy} onClick={remove}>
+          Delete this PO
+        </button>
+      </div>
+
       <div className="sticky bottom-2 z-10 rounded-lg border border-rule bg-white/95 px-3 py-2.5 shadow-[0_-2px_8px_rgb(22_32_44/0.06)] backdrop-blur">
-        <div className="grid grid-cols-2 gap-2 md:flex md:items-center">
-          <Button variant="danger" disabled={busy} onClick={remove} className="md:order-1">
-            Delete
+        <div className="flex items-center gap-2">
+          <p className="hidden flex-1 text-xs text-muted md:block">Save keeps your edits. PO is correct unlocks job creation.</p>
+          <Button variant="outline" disabled={disabled || !draft} onClick={() => save("save_draft")}>
+            Save
           </Button>
-          <Button variant="secondary" disabled={busy} onClick={reextract} className="md:order-2">
-            Re-extract
-          </Button>
-          <div className="hidden md:order-3 md:block md:flex-1" />
-          <Button variant="outline" disabled={disabled || !draft} onClick={() => save("save_draft")} className="md:order-4">
-            Save draft
-          </Button>
-          <Button disabled={disabled || !draft} onClick={() => save("confirm")} className="md:order-5">
-            Confirm reviewed
+          <Button disabled={disabled || !draft} onClick={() => save("confirm")}>
+            PO is correct
           </Button>
         </div>
       </div>

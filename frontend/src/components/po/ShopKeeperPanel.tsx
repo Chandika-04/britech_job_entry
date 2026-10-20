@@ -1,14 +1,27 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "@/api/client";
+import { CustomerMatchSection } from "@/components/po/CustomerMatch";
+import { PartMatchSection } from "@/components/po/PartMatch";
+import { PrintJobDialog } from "@/components/po/PrintJobDialog";
 import { ErpBadge } from "@/components/po/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
-import type { CustomerCandidate, CustomerSuggestion, LineItem, PartCandidate, PoDetail } from "@/types/po";
+import { cn, focusNextEmpty } from "@/lib/utils";
+import type { CreatePrintResult, LineItem, PoDetail } from "@/types/po";
+
+async function createJobThenPrint(
+  poId: number,
+  lineId: number,
+  certAvailable: boolean,
+  askPrint: (jobNumber: string, certAvailable: boolean) => Promise<void>,
+) {
+  const result = await api.createJob(poId, lineId);
+  if (result.printed) await askPrint(result.job_number, certAvailable);
+  return result;
+}
 
 interface Props {
   po: PoDetail;
@@ -18,13 +31,11 @@ interface Props {
   disabled?: boolean;
 }
 
-type RunLine = (lineId: number, work: () => Promise<PoDetail>, notice?: string) => Promise<void>;
+export type RunLine = (lineId: number, work: () => Promise<PoDetail>, notice?: string) => Promise<void>;
 
-const MATCH_LABELS: Record<string, string> = {
-  alias: "Matched from a previous confirmation",
-  exact: "Exact name match",
-  contains: "Likely match",
-};
+function certEditable(line: LineItem): boolean {
+  return line.erp_status !== "created" && line.erp_status !== "creating";
+}
 
 function needsAttention(line: LineItem): boolean {
   if (line.erp_status === "created") return false;
@@ -37,39 +48,28 @@ function needsAttention(line: LineItem): boolean {
 }
 
 export function ShopKeeperPanel({ po, onChange, onError, onNotice, disabled }: Props) {
-  const [customerQuery, setCustomerQuery] = useState(po.customer_name || "");
-  const [customerMatches, setCustomerMatches] = useState<CustomerCandidate[]>([]);
-  const [applyToAll, setApplyToAll] = useState(true);
-  const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [busyLine, setBusyLine] = useState<number | null>(null);
-  const [suggestion, setSuggestion] = useState<CustomerSuggestion | null>(null);
-  const [suggestionError, setSuggestionError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(
     () => new Set(po.line_items.filter(needsAttention).map((line) => line.id)),
   );
-  const firstLineId = po.line_items[0]?.id;
   const confirmed = po.review_state === "confirmed";
-  const resolvedCodes = Array.from(
-    new Set(po.line_items.map((line) => line.resolved_customer_code).filter((code): code is string => Boolean(code))),
-  );
-  const allResolved = po.line_items.length > 0 && po.line_items.every((line) => line.resolved_customer_code);
   const createdCount = po.line_items.filter((line) => line.erp_status === "created").length;
+  const readyLines = po.line_items.filter((line) => line.erp_status === "ready");
+  const [batchBlock, setBatchBlock] = useState<CreatePrintResult | null>(null);
+  const printWaiter = useRef<(() => void) | null>(null);
+  const [printJob, setPrintJob] = useState<{ jobNumber: string; certAvailable: boolean } | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    setSuggestionError(null);
-    api
-      .suggestCustomer(po.id)
-      .then((result) => {
-        if (!cancelled) setSuggestion(result);
-      })
-      .catch((err: Error) => {
-        if (!cancelled) setSuggestionError(err.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [po.id, po.customer_name]);
+  const askPrint = (jobNumber: string, certAvailable: boolean) =>
+    new Promise<void>((resolve) => {
+      printWaiter.current = resolve;
+      setPrintJob({ jobNumber, certAvailable });
+    });
+
+  const finishPrint = () => {
+    setPrintJob(null);
+    printWaiter.current?.();
+    printWaiter.current = null;
+  };
 
   const run = async (lineId: number | null, work: () => Promise<PoDetail>, notice?: string) => {
     setBusyLine(lineId);
@@ -94,87 +94,68 @@ export function ShopKeeperPanel({ po, onChange, onError, onNotice, disabled }: P
     });
   };
 
-  const useCustomer = (customerNumber: string) =>
-    firstLineId
-      ? run(
-          firstLineId,
-          () => api.resolveCustomer(po.id, firstLineId, customerNumber, applyToAll),
-          `Customer ${customerNumber} stored.`,
-        )
-      : undefined;
-
-  const searchCustomers = async () => {
-    setSearchingCustomers(true);
-    try {
-      const result = await api.lookupCustomers(customerQuery.trim());
-      setCustomerMatches(result.matches);
-      if (result.matches.length === 0) onError("No ShopKeeper bill-to/both customers matched that search.");
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Customer lookup failed.");
-    } finally {
-      setSearchingCustomers(false);
-    }
-  };
-
   return (
     <div>
       <p className="border-b border-rule-soft px-4 py-2 text-xs text-muted">
-        Match the PO to an existing ShopKeeper customer and part. The app never creates customers or parts.
-        {confirmed ? " Create one job per line after each line is ready." : " Confirm the PO before creating jobs."}
+        Match this PO to a ShopKeeper customer and each line to a ShopKeeper part. New parts are added on the Parts
+        tab. The app never creates customers.
+        {confirmed
+          ? " Ready lines can create a job and print the traveler."
+          : " Click PO is correct at the bottom before creating jobs."}
       </p>
 
-      <section className="border-b border-rule-soft px-4 py-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="section-label">Customer</h3>
-          {resolvedCodes.length > 0 ? (
-            <span className="text-xs text-muted">
-              Stored on {allResolved ? "all lines" : "some lines"}:{" "}
-              <span className="font-mono font-semibold text-ink">{resolvedCodes.join(", ")}</span>
-            </span>
-          ) : null}
-        </div>
-
-        <CustomerSuggestionBlock
-          suggestion={suggestion}
-          error={suggestionError}
-          resolvedCodes={resolvedCodes}
-          disabled={disabled || !firstLineId}
-          onUse={useCustomer}
+      <div className="border-b border-rule-soft px-4 py-3">
+        <CustomerMatchSection
+          po={po}
+          disabled={disabled || busyLine != null}
+          onChange={onChange}
+          onError={onError}
+          onNotice={onNotice}
+          onAfterUse={() => focusNextEmpty(["po-number", "part-line-0"])}
         />
+      </div>
 
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Input
-            value={customerQuery}
-            disabled={disabled}
-            placeholder="Search ShopKeeper by customer number or company"
-            onChange={(event) => setCustomerQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && customerQuery.trim()) searchCustomers();
-            }}
-          />
-          <Button type="button" variant="outline" disabled={disabled || searchingCustomers || !customerQuery.trim()} onClick={searchCustomers}>
-            Search
-          </Button>
-          <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted">
-            <input type="checkbox" checked={applyToAll} onChange={(event) => setApplyToAll(event.target.checked)} disabled={disabled} />
-            Apply to every line
-          </label>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pb-1 pt-3">
+        <h3 className="section-label">Jobs by line</h3>
+        <div className="flex flex-wrap items-center gap-3">
+          <CertAllCheckbox po={po} disabled={disabled || busyLine != null} onRun={run} />
+          {confirmed && readyLines.length > 1 ? (
+            <Button
+              size="sm"
+              disabled={disabled || busyLine != null}
+              onClick={() =>
+                run(readyLines[0].id, async () => {
+                  let latest = po;
+                  for (const line of readyLines) {
+                    const result = await createJobThenPrint(po.id, line.id, line.cert_required, askPrint);
+                    latest = result.po;
+                    if (result.missing_ops || result.missing_cert) {
+                      setBatchBlock(result);
+                      onNotice(`Job ${result.job_number} was created. Nothing was printed.`);
+                      return latest;
+                    }
+                    if (result.printed) onNotice(`Job ${result.job_number} created.`);
+                    else if (result.print_error) onNotice(`Job created. Print skipped: ${result.print_error}`);
+                    else onNotice("ShopKeeper job created.");
+                  }
+                  return latest;
+                })
+              }
+            >
+              Create all ready lines ({readyLines.length})
+            </Button>
+          ) : null}
+          <span className="font-mono text-xs text-muted tabular-nums">
+            {createdCount}/{po.line_items.length} created
+          </span>
         </div>
-        {customerMatches.length > 0 ? (
-          <CustomerTable
-            customers={customerMatches}
-            resolvedCodes={resolvedCodes}
-            disabled={disabled || !firstLineId}
-            onUse={useCustomer}
+        {batchBlock ? (
+          <JobPrintBlock
+            block={batchBlock}
+            poId={po.id}
+            onClose={() => setBatchBlock(null)}
           />
         ) : null}
-      </section>
-
-      <div className="flex items-baseline justify-between px-4 pb-1 pt-3">
-        <h3 className="section-label">Jobs by line</h3>
-        <span className="font-mono text-xs text-muted tabular-nums">
-          {createdCount}/{po.line_items.length} created
-        </span>
       </div>
 
       <div className="hidden min-w-0 md:block">
@@ -188,6 +169,7 @@ export function ShopKeeperPanel({ po, onChange, onError, onNotice, disabled }: P
               <th>Due</th>
               <th>Customer</th>
               <th>SK part</th>
+              <th>Cert</th>
               <th>Checks</th>
               <th>Status</th>
               <th>Job #</th>
@@ -222,22 +204,37 @@ export function ShopKeeperPanel({ po, onChange, onError, onNotice, disabled }: P
                         <span className="text-faint">—</span>
                       )}
                     </td>
+                    <td onClick={(event) => event.stopPropagation()}>
+                      <CertCheckbox po={po} line={line} disabled={lineDisabled} onRun={run} />
+                    </td>
                     <td>
                       <LineChecks line={line} />
                     </td>
                     <td>
                       <ErpBadge status={line.erp_status} />
                     </td>
-                    <td className="font-mono font-semibold">{line.erp_job_number || <span className="font-normal text-faint">—</span>}</td>
+                    <td className="font-mono font-semibold">
+                      {line.erp_job_number ? (
+                        <Link
+                          className="text-accent hover:underline"
+                          to={`/jobs/${encodeURIComponent(line.erp_job_number)}`}
+                          state={{ from: "po-review", poId: po.id }}
+                        >
+                          {line.erp_job_number}
+                        </Link>
+                      ) : (
+                        <span className="font-normal text-faint">—</span>
+                      )}
+                    </td>
                     <td className="whitespace-nowrap text-right" onClick={(event) => event.stopPropagation()}>
-                      <CreateJobButton po={po} line={line} confirmed={confirmed} disabled={lineDisabled} onRun={run} />
+                      <CreateJobButton po={po} line={line} confirmed={confirmed} disabled={lineDisabled} onRun={run} onNotice={onNotice} onAskPrint={askPrint} />
                     </td>
                   </tr>
                   {open ? (
                     <tr className="bg-head">
                       <td />
-                      <td colSpan={10} className="min-w-0 pb-3">
-                        <LineDetail po={po} line={line} disabled={lineDisabled} onRun={run} />
+                      <td colSpan={11} className="min-w-0 pb-3">
+                        <LineDetail po={po} line={line} disabled={lineDisabled} onRun={run} showFinder={false} />
                       </td>
                     </tr>
                   ) : null}
@@ -267,13 +264,88 @@ export function ShopKeeperPanel({ po, onChange, onError, onNotice, disabled }: P
                   {line.resolved_part_number ? `${line.resolved_part_number} rev ${line.resolved_part_revision || "—"}` : "—"}
                 </span>
               </p>
-              <LineDetail po={po} line={line} disabled={lineDisabled} onRun={run} />
-              <CreateJobButton po={po} line={line} confirmed={confirmed} disabled={lineDisabled} onRun={run} className="w-full" />
+              <label className="flex items-center gap-1.5 text-xs text-muted">
+                <CertCheckbox po={po} line={line} disabled={lineDisabled} onRun={run} />
+                Certificate of conformance
+              </label>
+              <LineDetail po={po} line={line} disabled={lineDisabled} onRun={run} showFinder={false} />
+              <CreateJobButton po={po} line={line} confirmed={confirmed} disabled={lineDisabled} onRun={run} onNotice={onNotice} onAskPrint={askPrint} className="w-full" />
             </div>
           );
         })}
       </div>
+      {printJob ? (
+        <PrintJobDialog jobNumber={printJob.jobNumber} certAvailable={printJob.certAvailable} onClose={finishPrint} />
+      ) : null}
     </div>
+  );
+}
+
+export function CertAllCheckbox({
+  po,
+  disabled,
+  onRun,
+}: {
+  po: PoDetail;
+  disabled?: boolean;
+  onRun: RunLine;
+}) {
+  const editable = po.line_items.filter(certEditable);
+  const anchor = editable[0];
+  const allOn = editable.length > 0 && editable.every((line) => line.cert_required);
+  const someOn = editable.some((line) => line.cert_required);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.indeterminate = someOn && !allOn;
+  }, [someOn, allOn]);
+
+  return (
+    <label className="flex items-center gap-1.5 text-xs text-muted">
+      <input
+        ref={inputRef}
+        type="checkbox"
+        checked={allOn}
+        disabled={disabled || !anchor}
+        onChange={() => {
+          if (!anchor) return;
+          onRun(
+            anchor.id,
+            () => api.setCertRequired(po.id, anchor.id, !allOn, true),
+            !allOn ? "Certificates marked for all lines." : "Certificates cleared for all lines.",
+          );
+        }}
+      />
+      Certs for all lines
+    </label>
+  );
+}
+
+export function CertCheckbox({
+  po,
+  line,
+  disabled,
+  onRun,
+}: {
+  po: PoDetail;
+  line: LineItem;
+  disabled?: boolean;
+  onRun: RunLine;
+}) {
+  return (
+    <input
+      type="checkbox"
+      checked={line.cert_required}
+      disabled={disabled || !certEditable(line)}
+      aria-label={`Certificate of conformance for line ${line.line_number ?? line.id}`}
+      onChange={() =>
+        onRun(
+          line.id,
+          () => api.setCertRequired(po.id, line.id, !line.cert_required),
+          !line.cert_required ? "Certificate required for this line." : "Certificate not required for this line.",
+        )
+      }
+    />
   );
 }
 
@@ -291,12 +363,14 @@ function LineChecks({ line }: { line: LineItem }) {
   );
 }
 
-function CreateJobButton({
+export function CreateJobButton({
   po,
   line,
   confirmed,
   disabled,
   onRun,
+  onNotice,
+  onAskPrint,
   className,
 }: {
   po: PoDetail;
@@ -304,179 +378,65 @@ function CreateJobButton({
   confirmed: boolean;
   disabled?: boolean;
   onRun: RunLine;
+  onNotice?: (message: string) => void;
+  onAskPrint: (jobNumber: string, certAvailable: boolean) => Promise<void>;
   className?: string;
 }) {
-  if (line.erp_status === "created" || line.erp_status === "skipped") return null;
+  const [block, setBlock] = useState<CreatePrintResult | null>(null);
+  if ((line.erp_status === "created" || line.erp_status === "skipped") && !block) return null;
   const canCreate = confirmed && line.erp_status === "ready";
   return (
-    <Button
-      size="sm"
-      className={className}
-      disabled={disabled || !canCreate}
-      onClick={() => onRun(line.id, () => api.createJob(po.id, line.id), "ShopKeeper job created.")}
-    >
-      Create job
-    </Button>
+    <>
+      <Button
+        size="sm"
+        className={className}
+        disabled={disabled || !canCreate}
+        onClick={() =>
+          onRun(line.id, async () => {
+            const result = await createJobThenPrint(po.id, line.id, line.cert_required, onAskPrint);
+            if (result.printed) onNotice?.(`Job ${result.job_number} created.`);
+            else if (result.missing_ops || result.missing_cert) setBlock(result);
+            else if (result.print_error) onNotice?.(`Job created. Print skipped: ${result.print_error}`);
+            else onNotice?.("ShopKeeper job created.");
+            return result.po;
+          })
+        }
+      >
+        Create job and print
+      </Button>
+      {block ? <JobPrintBlock block={block} poId={po.id} onClose={() => setBlock(null)} /> : null}
+    </>
   );
 }
 
-function CustomerSuggestionBlock({
-  suggestion,
-  error,
-  resolvedCodes,
-  disabled,
-  onUse,
-}: {
-  suggestion: CustomerSuggestion | null;
-  error: string | null;
-  resolvedCodes: string[];
-  disabled?: boolean;
-  onUse: (customerNumber: string) => void;
-}) {
-  if (error) {
-    return <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-800">Customer match unavailable: {error}</p>;
-  }
-  if (!suggestion) {
-    return <p className="mt-2 text-xs text-muted">Looking for a matching ShopKeeper customer…</p>;
-  }
-  if (!suggestion.extracted_name) {
-    return <p className="mt-2 text-xs text-muted">No customer name was extracted. Search below.</p>;
-  }
-
-  const warning = suggestion.warning ? (
-    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">{suggestion.warning}</p>
-  ) : null;
-
-  if (suggestion.customer) {
-    return (
-      <div className="mt-2 space-y-2">
-        {warning}
-        <div className="rounded-md border border-emerald-200 border-l-4 border-l-emerald-500 bg-emerald-50/60">
-          <p className="px-3 pt-1.5 text-xs text-emerald-900">
-            {MATCH_LABELS[suggestion.status] ?? "Suggested match"} for “{suggestion.extracted_name}”
-          </p>
-          <CustomerTable customers={[suggestion.customer]} resolvedCodes={resolvedCodes} disabled={disabled} onUse={onUse} bare />
-        </div>
-      </div>
-    );
-  }
-
-  if (suggestion.candidates.length > 0) {
-    return (
-      <div className="mt-2 space-y-2">
-        {warning}
-        <p className="text-xs text-muted">
-          {suggestion.status === "ambiguous" ? "Several customers share this name" : "Possible matches"} for “{suggestion.extracted_name}”. Pick one:
-        </p>
-        <CustomerTable customers={suggestion.candidates} resolvedCodes={resolvedCodes} disabled={disabled} onUse={onUse} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-2 space-y-2">
-      {warning}
-      <p className="text-xs text-muted">No ShopKeeper customer matched “{suggestion.extracted_name}”. Search below.</p>
-    </div>
-  );
-}
-
-function CustomerTable({
-  customers,
-  resolvedCodes,
-  disabled,
-  onUse,
-  bare,
-}: {
-  customers: CustomerCandidate[];
-  resolvedCodes: string[];
-  disabled?: boolean;
-  onUse: (customerNumber: string) => void;
-  bare?: boolean;
-}) {
-  return (
-    <div className={cn("min-w-0", !bare && "mt-2 rounded-md border border-rule")}>
-      <table className="data-table wrap">
-        {!bare ? (
-          <thead>
-            <tr>
-              <th>Cust #</th>
-              <th>Company</th>
-              <th>Type</th>
-              <th>Flags</th>
-              <th aria-label="Action" />
-            </tr>
-          </thead>
-        ) : null}
-        <tbody>
-          {customers.map((customer) => {
-            const selected = resolvedCodes.includes(customer.customer_number);
-            return (
-              <tr key={customer.customer_number} className={cn(bare && "[&>td]:border-b-0")}>
-                <td className="font-mono font-semibold">{customer.customer_number}</td>
-                <td>{customer.company || <span className="text-faint">No company name</span>}</td>
-                <td className="text-xs text-muted">{customer.record_type}</td>
-                <td>
-                  <div className="flex flex-wrap gap-1">
-                    {customer.credit_hold ? <Badge variant="warning">Credit hold</Badge> : null}
-                    {customer.active ? null : <Badge variant="muted">Inactive</Badge>}
-                  </div>
-                </td>
-                <td className="whitespace-nowrap text-right">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={selected ? "outline" : "default"}
-                    disabled={disabled || !customer.active || selected}
-                    onClick={() => onUse(customer.customer_number)}
-                  >
-                    {selected ? "Selected" : "Use"}
-                  </Button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function LineDetail({
+export function LineDetail({
   po,
   line,
   disabled,
   onRun,
+  showFinder = true,
 }: {
   po: PoDetail;
   line: LineItem;
   disabled?: boolean;
   onRun: RunLine;
+  showFinder?: boolean;
 }) {
-  const [partNumber, setPartNumber] = useState(line.customer_part_number || "");
-  const [partRevision, setPartRevision] = useState(line.revision || "");
-  const [partMatches, setPartMatches] = useState<PartCandidate[]>([]);
   const created = line.erp_status === "created";
   const skipped = line.erp_status === "skipped";
-
-  const searchParts = async () => {
-    try {
-      const result = await api.lookupParts(partNumber.trim(), partRevision.trim() || undefined);
-      setPartMatches(result.matches);
-      if (result.matches.length === 0) {
-        throw new Error("No active ShopKeeper part matched that number and revision.");
-      }
-    } catch (err) {
-      setPartMatches([]);
-      throw err;
-    }
-  };
 
   return (
     <div className="space-y-2">
       {line.erp_job_number ? (
         <p className="text-xs text-emerald-800">
-          ShopKeeper job <span className="font-mono font-semibold">{line.erp_job_number}</span>
+          ShopKeeper job{" "}
+          <Link
+            className="font-mono font-semibold text-accent hover:underline"
+            to={`/jobs/${encodeURIComponent(line.erp_job_number)}`}
+            state={{ from: "po-review", poId: po.id }}
+          >
+            {line.erp_job_number}
+          </Link>
           {line.erp_database ? ` on ${line.erp_database}` : ""}
         </p>
       ) : null}
@@ -501,7 +461,7 @@ function LineDetail({
       {line.duplicate_job_numbers?.length && !line.duplicate_acknowledged && !skipped ? (
         <div className="flex flex-col gap-2 rounded-md border border-amber-200 border-l-4 border-l-amber-500 bg-amber-50 px-3 py-1.5 text-xs text-amber-950 sm:flex-row sm:items-center sm:justify-between">
           <span>
-            ShopKeeper already has job <span className="font-mono font-semibold">{line.duplicate_job_numbers.join(", ")}</span> for this PO line.
+            ShopKeeper already has job <span className="font-mono font-semibold">{line.duplicate_job_numbers.join(", ")}</span> for this customer, PO, and part.
             Skip this line or confirm it is a genuine new order.
           </span>
           <div className="flex shrink-0 gap-2">
@@ -515,30 +475,29 @@ function LineDetail({
         </div>
       ) : null}
 
-      {!created ? (
-        <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2 sm:grid-cols-[minmax(0,16rem)_6rem_auto_1fr] sm:items-end">
-          <div className="space-y-1">
-            <Label>ShopKeeper part</Label>
-            <Input className="font-mono" value={partNumber} disabled={disabled} onChange={(event) => setPartNumber(event.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label>Rev</Label>
-            <Input className="font-mono" value={partRevision} disabled={disabled} onChange={(event) => setPartRevision(event.target.value)} />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled || !partNumber.trim()}
-            onClick={() =>
-              onRun(line.id, async () => {
-                await searchParts();
-                return po;
-              })
+      {!created && showFinder ? (
+        <div className="space-y-2">
+          <PartMatchSection
+            initialPartNumber={line.customer_part_number || ""}
+            initialRevision={line.revision || ""}
+            selectedPartNumber={line.resolved_part_number}
+            selectedRevision={line.resolved_part_revision}
+            selectedPmLinkId={line.resolved_pm_linkid}
+            disabled={disabled}
+            lineIndex={Math.max(0, po.line_items.findIndex((row) => row.id === line.id))}
+            onAfterUse={() => {
+              const index = Math.max(0, po.line_items.findIndex((row) => row.id === line.id));
+              focusNextEmpty([`qty-line-${index}`, `price-line-${index}`, `due-line-${index}`]);
+            }}
+            onUse={(match) =>
+              onRun(
+                line.id,
+                () => api.resolvePart(po.id, line.id, match.part_number, match.part_revision),
+                `Part ${match.part_number} rev ${match.part_revision} stored.`,
+              )
             }
-          >
-            Find part
-          </Button>
-          <div className="col-span-2 flex justify-end gap-2 sm:col-span-1">
+          />
+          <div className="flex justify-end">
             {!skipped ? (
               <Button variant="ghost" size="sm" disabled={disabled} onClick={() => onRun(line.id, () => api.skipLine(po.id, line.id), "Line skipped.")}>
                 Skip line
@@ -546,65 +505,100 @@ function LineDetail({
             ) : null}
           </div>
         </div>
-      ) : (
+      ) : !created ? (
         <div className="flex justify-end">
+          {!skipped ? (
+            <Button variant="ghost" size="sm" disabled={disabled} onClick={() => onRun(line.id, () => api.skipLine(po.id, line.id), "Line skipped.")}>
+              Skip line
+            </Button>
+          ) : null}
+        </div>
+      ) : (
+        <details className="rounded-md border border-rule px-3 py-2 text-xs text-muted">
+          <summary className="cursor-pointer font-semibold">Office only — delete job</summary>
+          <p className="mt-2">
+            Deletes the ShopKeeper job the same way ShopKeeper Delete Job does, then clears it from this app. Refused if
+            the job is on a shipper, locked, kitted, timed, traveler-printed, or has serials.
+          </p>
           <Button
+            className="mt-2"
+            variant="danger"
+            size="sm"
+            disabled={disabled}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  `Permanently delete ShopKeeper job ${line.erp_job_number}? This cannot be undone.`,
+                )
+              ) {
+                return;
+              }
+              return onRun(
+                line.id,
+                () => api.deleteShopKeeperJobForLine(po.id, line.id),
+                "ShopKeeper job deleted. You can create a new job.",
+              );
+            }}
+          >
+            Delete ShopKeeper job
+          </Button>
+          <p className="mt-3">
+            If the job is already gone from ShopKeeper, clear the job number in this app only so you can create the line
+            again.
+          </p>
+          <Button
+            className="mt-2"
             variant="secondary"
             size="sm"
             disabled={disabled}
             onClick={() => {
-              if (!window.confirm("Reset this line so a new ShopKeeper job can be created? Use this only after the existing job was deleted in ShopKeeper.")) {
+              if (!window.confirm("Clear this job from the app? Only continue if it was deleted in ShopKeeper.")) {
                 return;
               }
-              return onRun(line.id, () => api.resetErp(po.id, line.id), "ERP status reset.");
+              return onRun(line.id, () => api.resetErp(po.id, line.id), "Line cleared. You can create a new job.");
             }}
           >
-            Admin reset
+            Clear job from this app
           </Button>
-        </div>
+        </details>
       )}
+    </div>
+  );
+}
 
-      {partMatches.length > 0 && !created ? (
-        <div className="min-w-0 rounded-md border border-rule bg-white">
-          <table className="data-table wrap">
-            <thead>
-              <tr>
-                <th className="w-[22%]">Part #</th>
-                <th className="w-12">Rev</th>
-                <th>Description</th>
-                <th className="w-20">Type</th>
-                <th className="w-20" aria-label="Action" />
-              </tr>
-            </thead>
-            <tbody>
-              {partMatches.map((match) => (
-                <tr key={`${match.part_number}-${match.part_revision}`}>
-                  <td className="font-mono font-semibold">{match.part_number}</td>
-                  <td className="font-mono">{match.part_revision}</td>
-                  <td>{match.description || <span className="text-faint">No description</span>}</td>
-                  <td className="text-xs text-muted">{match.master_type || "—"}</td>
-                  <td className="whitespace-nowrap text-right">
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={disabled}
-                      onClick={() =>
-                        onRun(
-                          line.id,
-                          () => api.resolvePart(po.id, line.id, match.part_number, match.part_revision),
-                          `Part ${match.part_number} rev ${match.part_revision} stored.`,
-                        )
-                      }
-                    >
-                      Use
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
+function JobPrintBlock({
+  block,
+  poId,
+  onClose,
+}: {
+  block: CreatePrintResult;
+  poId: number;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-w-md rounded-lg border border-rule bg-white p-4 shadow-lg">
+        <h3 className="mb-2 text-sm font-semibold">Job {block.job_number} was created. Nothing was printed.</h3>
+        <ul className="mb-3 list-disc space-y-1 pl-5 text-sm">
+          {block.missing_ops ? <li>This job has no operations. Add steps or copy a template on the job page.</li> : null}
+          {block.missing_cert ? (
+            <li>Certificate is required but this part has none linked. Open the part to link a certification.</li>
+          ) : null}
+        </ul>
+        <Button
+          onClick={() => {
+            if (block.missing_ops) {
+              navigate(`/jobs/${encodeURIComponent(block.job_number)}`, { state: { from: "po-review", poId } });
+            } else if (block.pm_linkid) {
+              navigate(`/parts/${block.pm_linkid}`);
+            }
+            onClose();
+          }}
+        >
+          Continue
+        </Button>
+      </div>
     </div>
   );
 }

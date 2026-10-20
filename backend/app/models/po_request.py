@@ -24,6 +24,11 @@ class ReviewState(str, enum.Enum):
     confirmed = "confirmed"
 
 
+class PoSource(str, enum.Enum):
+    upload = "upload"
+    manual = "manual"
+
+
 class PoRequest(Base):
     __tablename__ = "po_request"
 
@@ -47,6 +52,12 @@ class PoRequest(Base):
     review_state: Mapped[ReviewState] = mapped_column(
         Enum(ReviewState, name="review_state", native_enum=False, length=32),
         default=ReviewState.unreviewed,
+        nullable=False,
+        index=True,
+    )
+    source: Mapped[PoSource] = mapped_column(
+        Enum(PoSource, name="po_source", native_enum=False, length=32),
+        default=PoSource.upload,
         nullable=False,
         index=True,
     )

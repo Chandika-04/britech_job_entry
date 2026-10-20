@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { FileUp, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { ArrowLeft, FileUp, X } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -98,9 +98,14 @@ export function UploadPage() {
         : `${files.length} purchase orders selected`;
 
   return (
-    <Card className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-2xl space-y-3">
+      <Link to="/new" className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline">
+        <ArrowLeft className="h-3.5 w-3.5" />
+        New PO
+      </Link>
+    <Card>
       <CardHeader>
-        <CardTitle>Upload purchase orders</CardTitle>
+        <CardTitle>Upload a PDF</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-[13px] text-muted">
@@ -177,5 +182,6 @@ export function UploadPage() {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }

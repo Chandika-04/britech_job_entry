@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     shopkeeper_non_tax_code: str = "NT"
     shopkeeper_new_job_status: str = "NA"
     shopkeeper_job_reserve_retries: int = 5
+    warehouse_printer_name: str = ""
+    part_photos_dir: str = r"\\DISKSTATION\PartPhotos"
     app_version: str = "0.2.0"
 
     @property
