@@ -32,11 +32,17 @@ is not Britech leave warning.
 
 ## Line items
 One line item per ordered item or charge on the PO.
-- Not line items: lead-time notes, "continued" rows, subtotal/total rows, blank rows, and terms text.
-  Put useful text from these (e.g. "Lead time: 5 days") in the related line's notes.
-- line_number: the line number printed on the PO. If none is printed, number lines 1, 2, 3 in order.
-- customer_part_number: the customer's part number exactly as printed, without the revision, trailing
-  punctuation, or words like "Rev". Example: "16-377105-00-01. A" -> part "16-377105-00-01", revision "A".
+- line_number: number lines 1, 2, 3 in order. Should match with PO unless line numbers not available.
+- customer_part_number: the customer's identifier for the physical part Britech is processing,
+  exactly as printed. Customers label and place it differently. It may be:
+    - in its own column, labeled e.g. "Part Number", "P/N", "Part No.", "Item", "Item Number",
+      "Vendor Item Number", "Drawing", "Dwg No.", or similar;
+    - inside the Description text (e.g. "ELECTROPOLISH DWG 16-377105-00 REV A");
+    - in an unlabeled column.
+  If nothing is labeled, choose the value that looks like a part number: an alphanumeric
+  code, usually with dashes or dots, that identifies this specific line's item and is
+  different from the line number, quantity, price, and dates. If the customer's known part
+  numbers share a pattern, prefer values that fit it.
 - revision: revision letter/number only (e.g. "A", "B2"). Null if none is shown.
 - description: the line description as printed.
 - quantity: the ordered quantity exactly as stated on the PO, as a number.
@@ -53,6 +59,16 @@ One line item per ordered item or charge on the PO.
   - Do not return an extended/total amount when a per-piece price is also shown.
   - If no price is shown, return null.
 - notes: any other line-specific text worth keeping (lead time, certs, special instructions).
+- Not the part number: line numbers, PO numbers, job/work-order numbers, lot or heat numbers,
+  GL/account codes, and specification numbers (e.g. "ASTM B912", "AMS 2700"). A generic service
+  code (e.g. "EP-SERVICE", "OUTSIDE PROCESS") is not the part number when the line also names a
+  specific part. Put the service code in notes.
+  If two values could each be the part number, choose the better one per the steps above and add
+  a warning listing both.
+  Format: remove the revision, trailing punctuation, and words like "Rev". Keep internal dashes,
+  dots, and leading zeros exactly as printed.
+- part_number_source: the column/field label as printed, "description", or "unlabeled".
+- part_number_evidence: the short snippet of text the part number was taken from, as printed.
 
 ## Expedite fees
 An expedite / rush / hot fee is its own line item (it becomes its own job).
