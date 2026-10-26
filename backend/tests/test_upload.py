@@ -106,6 +106,22 @@ def test_list_search_sort_pagination(client, db):
         assert item["created_at"].endswith(("Z", "+00:00"))
 
 
+def test_list_queue_puts_unfinished_work_first(client, db):
+    from app.models.po_line_item import PoLineItem
+    from app.models.po_request import PoRequest, PoStatus, ReviewState
+
+    done = PoRequest(po_number="DONE-Q", status=PoStatus.extracted, review_state=ReviewState.confirmed, warnings=[], shipper_number="1")
+    done.line_items = [PoLineItem(line_number=1, erp_status="created", erp_shipper_number="1")]
+    open_jobs = PoRequest(po_number="OPEN-Q", status=PoStatus.extracted, review_state=ReviewState.confirmed, warnings=[])
+    open_jobs.line_items = [PoLineItem(line_number=1, erp_status="ready")]
+    needs_check = PoRequest(po_number="CHECK-Q", status=PoStatus.extracted, review_state=ReviewState.unreviewed, warnings=[])
+    db.add_all([done, open_jobs, needs_check])
+    db.commit()
+
+    numbers = [item["po_number"] for item in client.get("/api/po", params={"sort": "queue"}).json()["items"]]
+    assert numbers.index("CHECK-Q") < numbers.index("OPEN-Q") < numbers.index("DONE-Q")
+
+
 def test_list_reports_job_completion(client, db):
     from app.models.po_line_item import PoLineItem
     from app.models.po_request import PoRequest, PoStatus, ReviewState

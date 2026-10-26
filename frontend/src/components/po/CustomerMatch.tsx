@@ -36,6 +36,7 @@ export function CustomerMatchSection({ po, disabled, onChange, onError, onNotice
   const [suggestionError, setSuggestionError] = useState<string | null>(null);
   const lookupSeq = useRef(0);
   const matchesRef = useRef<CustomerCandidate[]>([]);
+  const [changing, setChanging] = useState(false);
   const firstLineId = po.line_items[0]?.id;
   const resolvedCodes = Array.from(
     new Set(po.line_items.map((line) => line.resolved_customer_code).filter((code): code is string => Boolean(code))),
@@ -80,6 +81,7 @@ export function CustomerMatchSection({ po, disabled, onChange, onError, onNotice
     if (!canStore) {
       onNotice(`Customer ${customer.customer_number} filled in.`);
       onAfterUse?.();
+      setChanging(false);
       return;
     }
     void run(async () => {
@@ -87,6 +89,7 @@ export function CustomerMatchSection({ po, disabled, onChange, onError, onNotice
       return api.resolveCustomer(po.id, firstLineId, customer.customer_number, applyToAll);
     }, `Customer ${customer.customer_number} stored.`);
     onAfterUse?.();
+    setChanging(false);
   };
 
   const searchCustomers = (query = customerQuery): Promise<CustomerCandidate[]> => {
@@ -148,6 +151,26 @@ export function CustomerMatchSection({ po, disabled, onChange, onError, onNotice
     const handle = window.setTimeout(() => searchCustomers(q), 250);
     return () => window.clearTimeout(handle);
   }, [customerQuery, disabled]);
+
+  if (allResolved && !changing) {
+    const name = po.customer_name?.trim();
+    return (
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+        <span>
+          Customer: <span className="font-mono font-semibold">{resolvedCodes.join(", ")}</span>
+          {name ? <> — <span className="font-bold">{name}</span></> : null}
+        </span>
+        <button
+          type="button"
+          className="text-xs font-semibold text-accent hover:underline disabled:opacity-40"
+          disabled={disabled}
+          onClick={() => setChanging(true)}
+        >
+          Change
+        </button>
+      </div>
+    );
+  }
 
   return (
     <section className="space-y-2">

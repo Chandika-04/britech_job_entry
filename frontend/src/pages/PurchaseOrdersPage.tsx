@@ -5,6 +5,7 @@ import { Search } from "lucide-react";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { poLabel, poSummaryPath } from "@/lib/poSummary";
 import { formatDate } from "@/lib/utils";
 import type { ShopKeeperJobRow, ShopKeeperPoListResponse } from "@/types/po";
 
@@ -21,10 +22,6 @@ type SearchBy = (typeof SEARCH_OPTIONS)[number]["value"];
 
 function normalizeSearchBy(value: string | null): SearchBy {
   return SEARCH_OPTIONS.some((option) => option.value === value) ? (value as SearchBy) : "po";
-}
-
-function poLabel(poNumber: string): string {
-  return poNumber.trim() ? poNumber : "(no PO number)";
 }
 
 export function PurchaseOrdersPage() {
@@ -79,6 +76,7 @@ export function PurchaseOrdersPage() {
       else next.delete(key);
     }
     if (!("page" in updates)) next.set("page", "1");
+    next.delete("view");
     setParams(next);
   };
 
@@ -104,38 +102,43 @@ export function PurchaseOrdersPage() {
         <div className="flex items-baseline gap-3">
           <div>
             <h2 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink">ShopKeeper jobs</h2>
-            <p className="text-xs text-muted">Jobs already in ShopKeeper. Click a job number to open it. Status: S = shipped, I = invoiced, blank = not shipped.</p>
+            <p className="text-xs text-muted">
+              Jobs already in ShopKeeper. Click a job number to open it, or a PO number to see every job on that PO. Status: S =
+              shipped, I = invoiced, blank = not shipped.
+            </p>
           </div>
           {data ? <span className="font-mono text-xs text-muted tabular-nums">{data.total} jobs</span> : null}
         </div>
-        <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] md:w-[620px]">
-          <select
-            className="h-10 rounded-md border border-rule bg-white px-2 text-[13px] font-medium text-ink md:h-8"
-            value={searchBy}
-            onChange={(event) => updateParams({ search_by: event.target.value, q: searchRef.current?.value ?? query })}
-          >
-            {SEARCH_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
-            <Input
-              key={`${searchBy}:${query}`}
-              ref={searchRef}
-              className="pl-8"
-              placeholder={placeholder}
-              defaultValue={query}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") runSearch();
-              }}
-            />
+        <div className="flex flex-wrap items-center gap-2 md:w-[760px] md:justify-end">
+          <div className="grid w-full gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] md:w-[620px]">
+            <select
+              className="h-10 rounded-md border border-rule bg-white px-2 text-[13px] font-medium text-ink md:h-8"
+              value={searchBy}
+              onChange={(event) => updateParams({ search_by: event.target.value, q: searchRef.current?.value ?? query })}
+            >
+              {SEARCH_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
+              <Input
+                key={`${searchBy}:${query}`}
+                ref={searchRef}
+                className="pl-8"
+                placeholder={placeholder}
+                defaultValue={query}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") runSearch();
+                }}
+              />
+            </div>
+            <Button type="button" variant="outline" onClick={runSearch}>
+              Search
+            </Button>
           </div>
-          <Button type="button" variant="outline" onClick={runSearch}>
-            Search
-          </Button>
         </div>
       </div>
 
@@ -204,7 +207,15 @@ function JobTable({ jobs }: { jobs: ShopKeeperJobRow[] }) {
                 {job.job_number}
               </Link>
             </td>
-            <td className="font-mono">{poLabel(job.po_number)}</td>
+            <td className="font-mono">
+              <Link
+                className="text-accent hover:underline"
+                to={poSummaryPath(job.customer_code, job.po_number)}
+                state={{ from: "purchase-orders", listSearch }}
+              >
+                {poLabel(job.po_number)}
+              </Link>
+            </td>
             <td className="max-w-[240px] truncate">{job.customer_name || job.customer_code || "—"}</td>
             <td className="font-mono">{job.part_number}</td>
             <td className="font-mono text-muted">{job.part_revision || "—"}</td>
@@ -227,3 +238,4 @@ function JobTable({ jobs }: { jobs: ShopKeeperJobRow[] }) {
     </table>
   );
 }
+

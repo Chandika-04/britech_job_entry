@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { api } from "@/api/client";
@@ -16,6 +16,11 @@ interface Props {
   selectedPmLinkId?: number | null;
   disabled?: boolean;
   lineIndex?: number;
+  lineId?: number;
+  poId?: number;
+  extractedDescription?: string;
+  customerCode?: string | null;
+  onBeforeCreatePart?: () => Promise<boolean>;
   onUse: (part: PartCandidate) => void | Promise<void>;
   onError?: (message: string) => void;
   onAfterUse?: () => void;
@@ -29,10 +34,16 @@ export function PartMatchSection({
   selectedPmLinkId,
   disabled,
   lineIndex = 0,
+  lineId,
+  poId,
+  extractedDescription,
+  customerCode,
+  onBeforeCreatePart,
   onUse,
   onError,
   onAfterUse,
 }: Props) {
+  const navigate = useNavigate();
   const [partNumber, setPartNumber] = useState(initialPartNumber);
   const [partRevision, setPartRevision] = useState(initialRevision);
   const [partMatches, setPartMatches] = useState<PartCandidate[]>([]);
@@ -112,6 +123,37 @@ export function PartMatchSection({
     });
   };
 
+  const createNewPart = async () => {
+    if (!lineId || poId == null || disabled) return;
+    if (onBeforeCreatePart) {
+      const ok = await onBeforeCreatePart();
+      if (!ok) return;
+    }
+    const params = new URLSearchParams();
+    const part = partNumber.trim() || initialPartNumber.trim();
+    if (part) params.set("part", part);
+    params.set("rev", partRevision.trim() || initialRevision.trim() || "-");
+    const customer = (customerCode || "").trim();
+    if (customer) params.set("customer", customer);
+    const desc = (extractedDescription || "").trim();
+    if (desc) params.set("desc", desc);
+    params.set("returnPo", String(poId));
+    params.set("returnLine", String(lineId));
+    navigate(`/parts/new?${params.toString()}`);
+  };
+
+  const createPartControl =
+    lineId && poId != null ? (
+      <button
+        type="button"
+        className="text-xs font-semibold text-accent hover:underline disabled:opacity-40"
+        disabled={disabled}
+        onClick={() => void createNewPart()}
+      >
+        Create new part
+      </button>
+    ) : null;
+
   useEffect(() => {
     if (disabled) return;
     const q = partNumber.trim();
@@ -159,7 +201,16 @@ export function PartMatchSection({
           {searching ? "Finding…" : "Find part"}
         </Button>
       </div>
-      {error ? <p className="text-xs text-muted">{error}</p> : null}
+      {error ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+          <span>{error}</span>
+          {createPartControl ? (
+            <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => void createNewPart()}>
+              Create new part
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {selectedPmLinkId ? (
         <Link to={`/parts/${selectedPmLinkId}`} className="text-xs font-semibold text-accent hover:underline">
           Edit part
@@ -167,6 +218,7 @@ export function PartMatchSection({
       ) : null}
       {partMatches.length > 0 ? (
         <div className="space-y-1">
+          {createPartControl ? <div>{createPartControl}</div> : null}
           {partMatches.length >= 50 ? (
             <p className="text-xs text-muted">Showing the first 50 matches. Type more to narrow the list.</p>
           ) : null}

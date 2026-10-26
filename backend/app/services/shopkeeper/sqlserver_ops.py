@@ -201,8 +201,10 @@ class SqlServerOpsMixin:
             ).fetchone()
             if not row:
                 return None
-            pm_linkid = int(row[7]) if row[7] is not None else None
+            pm_linkid = _resolve_part_link_id(cur, row[7], str(row[5] or ""), str(row[6] or ""))
             cert_linked = False
+            quality_hold = _as_bool(row[17])
+            pics: list[PartPicture] = []
             if pm_linkid is not None:
                 cert_linked = bool(
                     cur.execute(
@@ -210,21 +212,14 @@ class SqlServerOpsMixin:
                         pm_linkid,
                     ).fetchone()
                 )
+                hold = cur.execute(
+                    "SELECT COALESCE(Pm_QualityHold, 0) FROM dbo.PartMaster WHERE Pm_LinkID = ?",
+                    pm_linkid,
+                ).fetchone()
+                if hold:
+                    quality_hold = _as_bool(hold[0])
+                pics = _part_pictures(cur, pm_linkid)
             ops = [_row_to_op(item) for item in cur.execute(OP_SELECT, job_number).fetchall()]
-            pics: list[PartPicture] = []
-            if pm_linkid is not None:
-                pics = [
-                    PartPicture(int(item[0]), str(item[1] or ""), item[2], _as_bool(item[3]), _as_int(item[4]))
-                    for item in cur.execute(
-                        """
-                        SELECT Pmp_ID, Pmp_PictureName, Pmp_PictureDesc, COALESCE(Pmp_PrintOnTrav, 0), Pmp_SortOrder
-                        FROM dbo.PartMasterPics
-                        WHERE Pmp_PmLinkID = ?
-                        ORDER BY Pmp_SortOrder, Pmp_ID
-                        """,
-                        pm_linkid,
-                    )
-                ]
             due = row[12]
             if isinstance(due, datetime):
                 due = due.date()
@@ -247,7 +242,7 @@ class SqlServerOpsMixin:
                 due_date=due,
                 cert_required=_as_bool(row[13]),
                 cert_linked=cert_linked,
-                quality_hold=_as_bool(row[17]),
+                quality_hold=quality_hold,
                 status=row[14],
                 shipper_number=str(row[15]).strip() if row[15] else None,
                 traveler_printed=_as_bool(row[16]),
@@ -507,7 +502,7 @@ class SqlServerOpsMixin:
             cur = conn.cursor()
             job = cur.execute(
                 """
-                SELECT j.Jb_Qty_Order, r.Jr_PartMasterLink
+                SELECT j.Jb_Qty_Order, r.Jr_PartMasterLink, j.Jb_Part_Num, j.Jb_Part_Rev
                 FROM dbo.Jobs j
                 JOIN dbo.JobRelease r ON r.Jr_JobNum = j.Jb_Job_Num AND r.Jr_ReleaseNum = 1
                 WHERE j.Jb_Job_Num = ?
@@ -516,9 +511,9 @@ class SqlServerOpsMixin:
             ).fetchone()
             if not job:
                 raise AppError("Job not found.", status_code=404)
-            if job[1] is None:
+            pm_linkid = _resolve_part_link_id(cur, job[1], str(job[2] or ""), str(job[3] or ""))
+            if pm_linkid is None:
                 raise AppError("This job has no part master linked.", status_code=409)
-            pm_linkid = int(job[1])
             steps = cur.execute(
                 """
                 SELECT Om_LinkID, Om_SeqNum, Om_WCCode, Om_Description, Om_RunTime, Om_SetupTime,
@@ -535,6 +530,64 @@ class SqlServerOpsMixin:
             _replace_release1_ops(cur, job_number, int(job[0] or 0), steps)
             conn.commit()
             return [_row_to_op(item) for item in cur.execute(OP_SELECT, job_number)]
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def replace_part_ops_from_template(self, pm_linkid: int, template_id: int) -> list[OperationRow]:
+        conn, _ = self._connect()
+        try:
+            cur = conn.cursor()
+            _assert_part_writable(cur, pm_linkid)
+            steps = cur.execute(
+                """
+                SELECT Om_LinkID, Om_SeqNum, Om_WCCode, Om_Description, Om_RunTime, Om_SetupTime,
+                       COALESCE(Om_Subcontract, 0), Om_ProcessCode, Om_Process, COALESCE(Om_FA, 0),
+                       Om_Note, Om_Qty, Om_SchedDays
+                FROM dbo.OpMasterMasterOps
+                WHERE Om_MmLinkID = ?
+                ORDER BY Om_SeqNum
+                """,
+                template_id,
+            ).fetchall()
+            if not steps:
+                exists = cur.execute(
+                    "SELECT 1 FROM dbo.OpMasterMasters WHERE Omm_ID = ?",
+                    template_id,
+                ).fetchone()
+                if not exists:
+                    raise AppError("Template not found.", status_code=404)
+                raise AppError("This template has no steps.", status_code=409)
+            existing = cur.execute("SELECT Om_LinkID FROM dbo.OpMaster WHERE Om_PmLinkID = ?", pm_linkid).fetchall()
+            for row in existing:
+                _assert_no_part_children(cur, int(row[0]))
+            cur.execute("DELETE FROM dbo.OpMaster WHERE Om_PmLinkID = ?", pm_linkid)
+            for step in steps:
+                cur.execute(
+                    """
+                    INSERT INTO dbo.OpMaster (
+                        Om_PmLinkID, Om_SeqNum, Om_WCCode, Om_Description, Om_RunTime, Om_SetupTime,
+                        Om_Subcontract, Om_ProcessCode, Om_Process, Om_FA, Om_Note, Om_Qty, Om_SchedDays
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    pm_linkid,
+                    step[1],
+                    step[2],
+                    step[3],
+                    step[4] or 0,
+                    step[5] or 0,
+                    1 if step[6] else 0,
+                    step[7],
+                    step[8],
+                    1 if step[9] else 0,
+                    step[10],
+                    step[11] if step[11] is not None else 0,
+                    step[12] or 0,
+                )
+            conn.commit()
+            return [_row_to_op(item) for item in cur.execute(PART_OP_SELECT, pm_linkid)]
         except Exception:
             conn.rollback()
             raise
@@ -705,6 +758,7 @@ class SqlServerOpsMixin:
                     Pm_LeadTime, Pm_InActive, Pm_Locked, Pm_QualityHold, Pm_FAHold, Pm_ShipHold,
                     Pm_CreationDate
                 )
+                OUTPUT INSERTED.Pm_LinkID
                 VALUES (?, ?, N'Production', ?, ?, 0, 0, 0, 0, 0, 0, ?)
                 """,
                 payload.part_number,
@@ -713,9 +767,13 @@ class SqlServerOpsMixin:
                 payload.description,
                 datetime.now(),
             )
-            row = cur.execute("SELECT CAST(SCOPE_IDENTITY() AS int)").fetchone()
+            row = cur.fetchone()
+            if not row or row[0] is None:
+                conn.rollback()
+                raise AppError("ShopKeeper did not return a part ID.")
+            pm_linkid = int(row[0])
             conn.commit()
-            return int(row[0])
+            return pm_linkid
         except ConflictError:
             conn.rollback()
             raise
@@ -1049,6 +1107,43 @@ class SqlServerOpsMixin:
             raise
         finally:
             conn.close()
+
+
+def _resolve_part_link_id(cur, stored_link: object, part_number: str, part_revision: str) -> int | None:
+    number = (part_number or "").strip()
+    rev = (part_revision or "").strip() or "-"
+    if number:
+        row = cur.execute(
+            """
+            SELECT Pm_LinkID
+            FROM dbo.PartMaster
+            WHERE Pm_PartNum = ? AND Pm_PartRev = ?
+              AND COALESCE(Pm_MasterType, N'Production') = N'Production'
+              AND COALESCE(Pm_InActive, 0) = 0
+            """,
+            number,
+            rev,
+        ).fetchone()
+        if row:
+            return int(row[0])
+    if stored_link not in (None, 0, "0"):
+        return int(stored_link)
+    return None
+
+
+def _part_pictures(cur, pm_linkid: int) -> list[PartPicture]:
+    return [
+        PartPicture(int(item[0]), str(item[1] or ""), item[2], _as_bool(item[3]), _as_int(item[4]))
+        for item in cur.execute(
+            """
+            SELECT Pmp_ID, Pmp_PictureName, Pmp_PictureDesc, COALESCE(Pmp_PrintOnTrav, 0), Pmp_SortOrder
+            FROM dbo.PartMasterPics
+            WHERE Pmp_PmLinkID = ?
+            ORDER BY Pmp_SortOrder, Pmp_ID
+            """,
+            pm_linkid,
+        )
+    ]
 
 
 def _validate_wc(cur, wc_code: str) -> None:

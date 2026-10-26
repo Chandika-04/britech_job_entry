@@ -28,6 +28,7 @@ from app.services.shopkeeper.operations import (
     add_picture,
     certification_pdf,
     copy_part_instructions,
+    copy_part_template,
     copy_template,
     create_job_and_print,
     create_job_response,
@@ -167,6 +168,11 @@ def part_save_header(pm_linkid: int, payload: PartHeaderIn) -> PartEditorOut:
 @router.put("/parts/{pm_linkid}/operations", response_model=list[OperationOut])
 def part_save_ops(pm_linkid: int, payload: OperationsSaveIn) -> list[OperationOut]:
     return save_part_operations(pm_linkid, payload)
+
+
+@router.post("/parts/{pm_linkid}/copy-template", response_model=list[OperationOut])
+def part_copy_template(pm_linkid: int, payload: CopyTemplateIn) -> list[OperationOut]:
+    return copy_part_template(pm_linkid, payload.template_id)
 
 
 @router.post("/parts/{pm_linkid}/quality-hold", response_model=PartEditorOut)

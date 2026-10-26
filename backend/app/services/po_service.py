@@ -323,15 +323,19 @@ def _copy_resolved_customer(po: PoRequest, new_line: PoLineItem) -> None:
     find_duplicates(po, new_line)
 
 
-def apply_update(db: Session, po: PoRequest, payload: PoUpdate) -> bool:
-    """Apply reviewer edits. Returns True if stored data changed."""
+def apply_update(db: Session, po: PoRequest, payload: PoUpdate) -> tuple[bool, list[PoLineItem]]:
+    """Apply reviewer edits. Returns (changed, created lines whose fields changed)."""
     changed = False
+    header_changed = False
+    structure_changed = False
+    created_changed: list[PoLineItem] = []
     for incoming in payload.line_items:
         incoming.uom = normalize_unit(incoming.uom)
     for field in HEADER_FIELDS:
         new_value = getattr(payload, field)
         if getattr(po, field) != new_value:
             setattr(po, field, new_value)
+            header_changed = True
             changed = True
 
     existing_by_id = {item.id: item for item in po.line_items}
@@ -342,6 +346,7 @@ def apply_update(db: Session, po: PoRequest, payload: PoUpdate) -> bool:
                 {ErpWriteAudit.line_item_id: None}, synchronize_session=False
             )
             po.line_items.remove(item)
+            structure_changed = True
             changed = True
 
     for incoming in payload.line_items:
@@ -361,6 +366,7 @@ def apply_update(db: Session, po: PoRequest, payload: PoUpdate) -> bool:
             )
             _copy_resolved_customer(po, new_line)
             po.line_items.append(new_line)
+            structure_changed = True
             changed = True
             continue
         if _line_item_changed(existing, incoming):
@@ -375,19 +381,26 @@ def apply_update(db: Session, po: PoRequest, payload: PoUpdate) -> bool:
             existing.notes = incoming.notes
             existing.reviewer_edited = True
             changed = True
+            if existing.erp_status == "created":
+                created_changed.append(existing)
+            else:
+                structure_changed = True
 
     if changed:
         refresh_duplicate_warnings(db, po)
-        if po.review_state == ReviewState.confirmed:
+        only_created = bool(created_changed) and not header_changed and not structure_changed
+        if po.review_state == ReviewState.confirmed and not only_created:
             po.review_state = ReviewState.unreviewed
-    return changed
+    return changed, created_changed
 
 
 def save_draft(db: Session, po: PoRequest, payload: PoUpdate) -> PoRequest:
-    apply_update(db, po, payload)
-    from app.services.shopkeeper.writer import refresh_po_erp_status
+    _, created_changed = apply_update(db, po, payload)
+    from app.services.shopkeeper.writer import refresh_po_erp_status, sync_created_line_job
 
     refresh_po_erp_status(po)
+    for line in created_changed:
+        sync_created_line_job(po, line)
     db.add(po)
     db.commit()
     db.refresh(po)
@@ -395,14 +408,17 @@ def save_draft(db: Session, po: PoRequest, payload: PoUpdate) -> PoRequest:
 
 
 def confirm_reviewed(db: Session, po: PoRequest, payload: PoUpdate | None = None) -> PoRequest:
+    created_changed: list[PoLineItem] = []
     if payload is not None:
-        apply_update(db, po, payload)
+        _, created_changed = apply_update(db, po, payload)
     if po.status != PoStatus.extracted:
         raise ConflictError("This purchase order cannot be confirmed until extraction has completed.")
     po.review_state = ReviewState.confirmed
-    from app.services.shopkeeper.writer import refresh_po_erp_status
+    from app.services.shopkeeper.writer import refresh_po_erp_status, sync_created_line_job
 
     refresh_po_erp_status(po)
+    for line in created_changed:
+        sync_created_line_job(po, line)
     db.add(po)
     db.commit()
     db.refresh(po)

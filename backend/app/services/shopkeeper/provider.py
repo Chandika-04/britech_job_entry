@@ -17,6 +17,8 @@ from app.services.shopkeeper.types import (
     PrintDocumentData,
     ShipWritePayload,
     ShopKeeperJobRow,
+    ShopKeeperPoGroupRow,
+    ShopKeeperPoPage,
     ShopKeeperShipperPage,
     ShopKeeperShipperRow,
     WorkCenter,
@@ -70,6 +72,8 @@ class ShopKeeperProvider(Protocol):
 
     def replace_job_ops_from_template(self, job_number: str, template_id: int) -> list[OperationRow]: ...
 
+    def replace_part_ops_from_template(self, pm_linkid: int, template_id: int) -> list[OperationRow]: ...
+
     def replace_job_ops_from_part(self, job_number: str) -> list[OperationRow]: ...
 
     def get_part_editor(self, pm_linkid: int) -> PartEditorRecord | None: ...
@@ -101,6 +105,12 @@ class ShopKeeperProvider(Protocol):
     def list_purchase_orders(
         self, *, query: str | None, search_by: str, page: int, page_size: int
     ) -> tuple[list[ShopKeeperJobRow], int]: ...
+
+    def list_po_groups(
+        self, *, query: str | None, search_by: str, page: int, page_size: int
+    ) -> tuple[list[ShopKeeperPoGroupRow], int]: ...
+
+    def get_purchase_order(self, customer_code: str, po_number: str) -> ShopKeeperPoPage | None: ...
 
     def list_shippers(
         self, *, query: str | None, search_by: str, page: int, page_size: int

@@ -5,9 +5,9 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { JobPage } from "@/pages/JobPage";
 import { ManualEntryPage } from "@/pages/ManualEntryPage";
 import { NewPoPage } from "@/pages/NewPoPage";
-import { NewPartPage } from "@/pages/NewPartPage";
 import { PartEditorPage } from "@/pages/PartEditorPage";
 import { PartsPage } from "@/pages/PartsPage";
+import { PoSummaryPage } from "@/pages/PoSummaryPage";
 import { PurchaseOrdersPage } from "@/pages/PurchaseOrdersPage";
 import { ReviewPage } from "@/pages/ReviewPage";
 import { ShipperPage } from "@/pages/ShipperPage";
@@ -21,6 +21,7 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
+          <Route path="/purchase-orders/detail" element={<PoSummaryPage />} />
           <Route path="/shippers" element={<ShippersPage />} />
           <Route path="/shippers/:shipNumber" element={<ShipperPage />} />
           <Route path="/new" element={<NewPoPage />} />
@@ -30,7 +31,7 @@ export default function App() {
           <Route path="/po/:id" element={<ReviewPage />} />
           <Route path="/jobs/:jobNumber" element={<JobPage />} />
           <Route path="/parts" element={<PartsPage />} />
-          <Route path="/parts/new" element={<NewPartPage />} />
+          <Route path="/parts/new" element={<PartEditorPage />} />
           <Route path="/parts/:pmLinkId" element={<PartEditorPage />} />
         </Route>
       </Routes>

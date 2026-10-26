@@ -1,18 +1,19 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft } from "lucide-react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api } from "@/api/client";
 import { PdfViewer } from "@/components/pdf/PdfViewer";
-import { LineItemsEditor } from "@/components/po/LineItemsEditor";
-import { ShopKeeperPanel } from "@/components/po/ShopKeeperPanel";
+import { LinesCard } from "@/components/po/lines/LinesCard";
+import { createJobThenPrint, JobPrintBlock, type RunLine } from "@/components/po/lines/actions";
 import { PoHeaderForm } from "@/components/po/PoHeaderForm";
+import { PrintJobDialog } from "@/components/po/PrintJobDialog";
 import { ReviewBadge, StatusBadge } from "@/components/po/StatusBadge";
 import { ShipperCreatedBanner, WarningsBanner } from "@/components/po/WarningsBanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn, formatUsd, handleEnterAdvance } from "@/lib/utils";
-import type { LineItemDraft, PartCandidate, PoDetail, PoDraft } from "@/types/po";
+import type { CreatePrintResult, LineItemDraft, PartCandidate, PoDetail, PoDraft } from "@/types/po";
 
 function asText(value: string | number | null | undefined): string {
   return value == null ? "" : String(value);
@@ -59,14 +60,47 @@ function applyPart(draft: PoDraft, index: number, part: PartCandidate): PoDraft 
   return { ...draft, line_items };
 }
 
+function isDirty(po: PoDetail, draft: PoDraft): boolean {
+  return JSON.stringify(draft) !== JSON.stringify(toDraft(po));
+}
+
+function dirtyCreatedShippers(po: PoDetail, draft: PoDraft): string[] {
+  const original = toDraft(po);
+  const numbers = new Set<string>();
+  for (const item of draft.line_items) {
+    if (item.id == null) continue;
+    const line = po.line_items.find((row) => row.id === item.id);
+    if (line?.erp_status !== "created" || !line.erp_shipper_number) continue;
+    const before = original.line_items.find((row) => row.id === item.id);
+    if (JSON.stringify(item) !== JSON.stringify(before)) numbers.add(line.erp_shipper_number);
+  }
+  return [...numbers];
+}
+
 export function ReviewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const [po, setPo] = useState<PoDetail | null>(null);
   const [draft, setDraft] = useState<PoDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [busyLine, setBusyLine] = useState<number | null>(null);
+  const [poOpen, setPoOpen] = useState(false);
+  const [batchBlock, setBatchBlock] = useState<CreatePrintResult | null>(null);
+  const [printJob, setPrintJob] = useState<{ jobNumber: string; certAvailable: boolean } | null>(null);
+  const printWaiter = useRef<(() => void) | null>(null);
+
+  const focusLineRaw = params.get("line");
+  const focusLineId = focusLineRaw ? Number(focusLineRaw) : null;
+
+  const consumeFocusLine = useCallback(() => {
+    if (!params.has("line")) return;
+    const next = new URLSearchParams(params);
+    next.delete("line");
+    setParams(next, { replace: true });
+  }, [params, setParams]);
 
   const load = async () => {
     if (!id) return;
@@ -89,19 +123,62 @@ export function ReviewPage() {
     return () => window.clearInterval(timer);
   }, [id, po?.status]);
 
-  const disabled = po?.status !== "extracted" || busy;
+  const disabled = po?.status !== "extracted" || busy || busyLine != null;
+  const confirmed = po?.review_state === "confirmed";
+  const dirty = po && draft ? isDirty(po, draft) : false;
 
-  const save = async (action: "save_draft" | "confirm") => {
-    if (!id || !draft) return;
+  const askPrint = (jobNumber: string, certAvailable: boolean) =>
+    new Promise<void>((resolve) => {
+      printWaiter.current = resolve;
+      setPrintJob({ jobNumber, certAvailable });
+    });
+
+  const finishPrint = () => {
+    setPrintJob(null);
+    printWaiter.current?.();
+    printWaiter.current = null;
+  };
+
+  const run: RunLine = async (lineId, work, noticeText) => {
+    setBusyLine(lineId);
+    try {
+      const result = await work();
+      setPo(result);
+      setError(null);
+      if (noticeText) setNotice(noticeText);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "ShopKeeper request failed.");
+    } finally {
+      setBusyLine(null);
+    }
+  };
+
+  const save = async (action: "save_draft" | "confirm"): Promise<boolean> => {
+    if (!id || !draft || !po) return false;
+    const shippers = dirtyCreatedShippers(po, draft);
+    if (shippers.length) {
+      const ok = window.confirm(
+        `A shipper (${shippers.join(", ")}) was already created. Save these details anyway? The shipper quantity will be updated to match.`,
+      );
+      if (!ok) return false;
+    }
     setBusy(true);
     setError(null);
     try {
       const result = await api.review(id, action, draft);
       setPo(result);
       setDraft(toDraft(result));
-      setNotice(action === "confirm" ? "PO is marked correct. You can create jobs." : "Saved.");
+      setNotice(
+        action === "confirm"
+          ? "PO is marked correct. You can create jobs."
+          : shippers.length
+            ? "Saved. ShopKeeper jobs and shipper quantity updated."
+            : "Saved.",
+      );
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -120,7 +197,11 @@ export function ReviewPage() {
     try {
       const result = await api.resolvePart(po.id, line.id, part.part_number, part.part_revision);
       setPo(result);
-      setNotice(`Part ${part.part_number} rev ${part.part_revision} stored.`);
+      setNotice(
+        line.erp_status === "created"
+          ? `Part ${part.part_number} rev ${part.part_revision} stored and the ShopKeeper job updated.`
+          : `Part ${part.part_number} rev ${part.part_revision} stored.`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to store the ShopKeeper part.");
     } finally {
@@ -128,12 +209,40 @@ export function ReviewPage() {
     }
   };
 
+  const saveBeforeLeaving = async (): Promise<boolean> => {
+    if (!dirty) return true;
+    if (!window.confirm("Save your changes to this PO before leaving?")) return false;
+    return save("save_draft");
+  };
+
+  const createReadyJobs = () => {
+    if (!po) return;
+    const readyLines = po.line_items.filter((line) => line.erp_status === "ready");
+    if (readyLines.length === 0) return;
+    void run(readyLines[0].id, async () => {
+      let latest = po;
+      for (const line of readyLines) {
+        const result = await createJobThenPrint(po.id, line.id, line.cert_required, askPrint);
+        latest = result.po;
+        if (result.missing_ops || result.missing_cert) {
+          setBatchBlock(result);
+          setNotice(`Job ${result.job_number} was created. Nothing was printed.`);
+          return latest;
+        }
+        if (result.printed) setNotice(`Job ${result.job_number} created.`);
+        else if (result.print_error) setNotice(`Job created. Print skipped: ${result.print_error}`);
+        else setNotice("ShopKeeper job created.");
+      }
+      return latest;
+    });
+  };
+
   const reextract = async () => {
     if (!id) return;
-    const confirmed = window.confirm(
+    const ok = window.confirm(
       "Re-extract from the original PDF? This replaces the current extracted values, including any manual edits, and sets the PO back to unreviewed.",
     );
-    if (!confirmed) return;
+    if (!ok) return;
     setBusy(true);
     setError(null);
     try {
@@ -155,10 +264,18 @@ export function ReviewPage() {
   };
 
   if (error && !po) {
-    return <Notice tone="error">{error}</Notice>;
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <Notice tone="error">{error}</Notice>
+      </div>
+    );
   }
   if (!po) {
-    return <p className="text-[13px] text-muted">Loading…</p>;
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <p className="text-[13px] text-muted">Loading…</p>
+      </div>
+    );
   }
   if (po.source === "manual") {
     return <Navigate to={`/manual/${po.id}`} replace />;
@@ -166,6 +283,8 @@ export function ReviewPage() {
 
   const lineCount = po.line_items.length;
   const createdCount = po.line_items.filter((line) => line.erp_status === "created").length;
+  const jobMode = confirmed;
+  const poCollapsed = jobMode && !poOpen;
 
   return (
     <div className="space-y-3 pb-2">
@@ -198,8 +317,8 @@ export function ReviewPage() {
       {error ? <Notice tone="error">{error}</Notice> : null}
       {po.review_state === "confirmed" ? (
         <Notice tone="muted">
-          This PO is checked. Match the ShopKeeper customer and parts, then create jobs. Changing a saved field puts it back to
-          Needs check.
+          This PO is checked. You can still edit quantity, part, and the other line fields here — Save writes those to any
+          ShopKeeper job already created. Changing a line that does not have a job yet puts the PO back to Needs check.
         </Notice>
       ) : po.status === "extracted" ? (
         <Notice tone="info">
@@ -207,55 +326,60 @@ export function ReviewPage() {
         </Notice>
       ) : null}
 
-      <ShipperCreatedBanner shipperNumber={po.shipper_number} />
+      <ShipperCreatedBanner shipperNumber={po.shipper_number} poId={po.id} />
       <WarningsBanner warnings={po.warnings} />
 
       <div className="grid gap-3 xl:grid-cols-[minmax(26rem,5fr)_minmax(0,7fr)]">
         <PdfViewer poId={po.id} pageCount={po.page_count ?? 1} />
         <div className="flex min-w-0 flex-col gap-3" data-enter-form onKeyDown={handleEnterAdvance}>
-          {po.status === "extracted" ? (
-            <Card className={cn("min-w-0", po.review_state === "confirmed" || po.jobs_complete ? "order-1" : "order-3")}>
-              <CardHeader>
-                <CardTitle>ShopKeeper jobs</CardTitle>
-              </CardHeader>
-              <ShopKeeperPanel
-                po={po}
-                disabled={busy}
-                onChange={(result) => {
-                  setPo(result);
-                }}
-                onError={setError}
-                onNotice={setNotice}
-              />
-            </Card>
-          ) : null}
-          <Card className={po.review_state === "confirmed" || po.jobs_complete ? "order-2" : "order-1"}>
-            <CardHeader>
+          <Card>
+            <CardHeader className="flex-wrap gap-2">
               <CardTitle>PO information</CardTitle>
+              {jobMode ? (
+                <button
+                  type="button"
+                  className="ml-auto inline-flex items-center gap-1 text-xs font-semibold"
+                  onClick={() => setPoOpen((open) => !open)}
+                >
+                  {poCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  {poCollapsed ? "Show" : "Hide"}
+                </button>
+              ) : null}
             </CardHeader>
             <CardContent>
-              {draft ? (
-                <PoHeaderForm draft={draft} onChange={setDraft} disabled={disabled} />
+              {draft && poCollapsed ? (
+                <p className="text-[13px]">
+                  <span className="font-mono font-semibold">{draft.po_number || "PO # pending"}</span>
+                  {" · "}
+                  <span className="font-bold">{draft.customer_name || "Customer pending"}</span>
+                  {draft.order_date ? <span className="font-mono text-muted"> · {draft.order_date}</span> : null}
+                </p>
+              ) : draft ? (
+                <PoHeaderForm draft={draft} onChange={setDraft} disabled={disabled} compact={jobMode} />
               ) : (
                 <p className="text-[13px] text-muted">Waiting for extraction.</p>
               )}
             </CardContent>
           </Card>
-          <Card className={cn("overflow-hidden", po.review_state === "confirmed" || po.jobs_complete ? "order-3" : "order-2")}>
-            <CardHeader className="flex items-baseline justify-between">
-              <CardTitle>Line items</CardTitle>
-              {draft ? <span className="font-mono text-xs text-muted tabular-nums">{draft.line_items.length}</span> : null}
-            </CardHeader>
-            {draft ? (
-              <LineItemsEditor
-                draft={draft}
-                onChange={setDraft}
-                disabled={disabled}
-                po={po}
-                onUsePart={usePart}
-              />
-            ) : null}
-          </Card>
+          {draft ? (
+            <LinesCard
+              po={po}
+              draft={draft}
+              disabled={disabled}
+              confirmed={Boolean(confirmed)}
+              focusLineId={focusLineId}
+              onFocusConsumed={consumeFocusLine}
+              onChangeDraft={setDraft}
+              onUsePart={usePart}
+              onBeforeCreatePart={saveBeforeLeaving}
+              onChangePo={setPo}
+              onError={setError}
+              onNotice={setNotice}
+              onRun={run}
+              onAskPrint={askPrint}
+              onCreateReadyJobs={createReadyJobs}
+            />
+          ) : null}
         </div>
       </div>
 
@@ -271,15 +395,26 @@ export function ReviewPage() {
 
       <div className="sticky bottom-2 z-10 rounded-lg border border-rule bg-white/95 px-3 py-2.5 shadow-[0_-2px_8px_rgb(22_32_44/0.06)] backdrop-blur">
         <div className="flex items-center gap-2">
-          <p className="hidden flex-1 text-xs text-muted md:block">Save keeps your edits. PO is correct unlocks job creation.</p>
-          <Button variant="outline" disabled={disabled || !draft} onClick={() => save("save_draft")}>
+          <p className="hidden flex-1 text-xs text-muted md:block">
+            {jobMode
+              ? "Save keeps field edits and updates ShopKeeper jobs already created."
+              : "Save keeps your edits. PO is correct unlocks job creation."}
+          </p>
+          <Button variant="outline" disabled={disabled || !draft} onClick={() => void save("save_draft")}>
             Save
           </Button>
-          <Button disabled={disabled || !draft} onClick={() => save("confirm")}>
-            PO is correct
-          </Button>
+          {!jobMode ? (
+            <Button disabled={disabled || !draft} onClick={() => void save("confirm")}>
+              PO is correct
+            </Button>
+          ) : null}
         </div>
       </div>
+
+      {printJob ? (
+        <PrintJobDialog jobNumber={printJob.jobNumber} certAvailable={printJob.certAvailable} onClose={finishPrint} />
+      ) : null}
+      {batchBlock ? <JobPrintBlock block={batchBlock} poId={po.id} onClose={() => setBatchBlock(null)} /> : null}
     </div>
   );
 }

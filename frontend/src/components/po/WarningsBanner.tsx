@@ -1,9 +1,10 @@
 import { AlertTriangle, Truck } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import type { WarningItem } from "@/types/po";
 import { cn } from "@/lib/utils";
 
-export function ShipperCreatedBanner({ shipperNumber }: { shipperNumber: string | null }) {
+export function ShipperCreatedBanner({ shipperNumber, poId }: { shipperNumber: string | null; poId?: number }) {
   if (!shipperNumber) return null;
   return (
     <div className="rounded-lg border border-l-4 border-emerald-200 border-l-emerald-500 bg-emerald-50 px-3 py-2 text-[13px] text-emerald-950">
@@ -12,7 +13,18 @@ export function ShipperCreatedBanner({ shipperNumber }: { shipperNumber: string 
         Shipper created
       </div>
       <p className="mt-1">
-        Shipper # <span className="font-mono font-semibold tabular-nums">{shipperNumber}</span>
+        Shipper #{" "}
+        {poId != null ? (
+          <Link
+            to={`/shippers/${encodeURIComponent(shipperNumber)}`}
+            state={{ from: "po-review", poId }}
+            className="font-mono font-semibold tabular-nums text-accent hover:underline"
+          >
+            {shipperNumber}
+          </Link>
+        ) : (
+          <span className="font-mono font-semibold tabular-nums">{shipperNumber}</span>
+        )}
       </p>
     </div>
   );

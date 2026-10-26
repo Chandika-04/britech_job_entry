@@ -214,6 +214,28 @@ export interface ShopKeeperPoListResponse {
   search_by: string;
 }
 
+export interface ShopKeeperPoGroupRow {
+  customer_code: string;
+  customer_name: string | null;
+  po_number: string;
+  job_count: number;
+  shipper_numbers: string | null;
+  order_date: string | null;
+}
+
+export interface ShopKeeperPoGroupListResponse {
+  items: ShopKeeperPoGroupRow[];
+  total: number;
+  page: number;
+  page_size: number;
+  query: string | null;
+  search_by: string;
+}
+
+export interface ShopKeeperPoPage extends ShopKeeperPoGroupRow {
+  jobs: ShopKeeperJobRow[];
+}
+
 export interface ShopKeeperShipperRow {
   shipper_number: string;
   status: string | null;
@@ -372,6 +394,7 @@ export interface PartEditor {
   linked_certs: CertText[];
   cert_library: CertText[];
   work_centers: WorkCenter[];
+  templates: OpTemplate[];
 }
 
 export interface PartHeaderPayload {

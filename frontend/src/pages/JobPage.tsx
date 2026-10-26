@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { rememberJobNav } from "@/lib/jobNav";
+import { poSummaryPath } from "@/lib/poSummary";
 import { cn, formatUsd, handleEnterAdvance, parseMoney } from "@/lib/utils";
 import type { JobHeaderPayload, JobPage, OperationRow } from "@/types/po";
 
@@ -106,15 +107,20 @@ export function JobPage() {
 
   const backToPo = nav?.from === "po-review";
   const fromShipper = nav?.from === "shippers";
+  const fromPoSummary = nav?.from === "po-summary";
   const poId = nav?.poId ?? job?.po_id ?? null;
   const backTo =
     backToPo && poId
       ? `/po/${poId}`
-      : fromShipper && nav?.shipNumber
-        ? `/shippers/${encodeURIComponent(nav.shipNumber)}`
-        : fromShipper
-          ? `/shippers${nav?.listSearch ?? ""}`
-          : `/purchase-orders${nav?.listSearch ?? ""}`;
+      : fromPoSummary && nav?.customerCode
+        ? poSummaryPath(nav.customerCode, nav.poNumber ?? "")
+        : fromShipper && nav?.shipNumber
+          ? `/shippers/${encodeURIComponent(nav.shipNumber)}`
+          : fromShipper
+            ? `/shippers${nav?.listSearch ?? ""}`
+            : `/purchase-orders${nav?.listSearch ?? ""}`;
+  const backState = fromPoSummary ? { from: "purchase-orders" as const, listSearch: nav?.listSearch } : undefined;
+  const backLabel = backToPo ? "Back to PO" : fromPoSummary ? "Back to this PO" : fromShipper ? "Back to shipper" : "Back to ShopKeeper jobs";
 
   const run = async (work: () => Promise<void>, ok?: string) => {
     setBusy(true);
@@ -136,9 +142,9 @@ export function JobPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link to={backTo} className="inline-flex items-center gap-1 text-sm text-muted hover:text-accent">
+        <Link to={backTo} state={backState} className="inline-flex items-center gap-1 text-sm text-muted hover:text-accent">
           <ArrowLeft className="h-4 w-4" />
-          {backToPo ? "Back to PO" : fromShipper ? "Back to shipper" : "Back to ShopKeeper jobs"}
+          {backLabel}
         </Link>
         <div className="flex flex-col items-end gap-1">
           <Button disabled={busy || !job?.print_ready} onClick={() => setPrintOpen(true)}>

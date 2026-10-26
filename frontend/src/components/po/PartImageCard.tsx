@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "@/api/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { pictureFileName } from "@/lib/partPath";
 import type { PartPicture } from "@/types/po";
 
 function pickPicture(pictures: PartPicture[]): PartPicture | null {
@@ -25,7 +26,11 @@ export function PartImageCard({ pictures, pmLinkId }: { pictures: PartPicture[];
         {!pic || pmLinkId == null ? (
           <img src="/no-image.png" alt="No image available" className="max-h-56 max-w-[70%] object-contain" />
         ) : failed ? (
-          <p className="max-w-[80%] break-all text-center font-mono text-[11px] text-muted">{pic.path || "Image could not be displayed."}</p>
+          <div className="max-w-[80%] space-y-1 text-center">
+            <p className="text-sm text-ink">{pictureFileName(pic.path) || "Image"}</p>
+            <p className="break-all font-mono text-[11px] text-muted">{pic.path}</p>
+            <p className="text-xs text-muted">Image file not found on the PartPhotos share.</p>
+          </div>
         ) : (
           <img
             src={api.partPictureUrl(pmLinkId, pic.id)}

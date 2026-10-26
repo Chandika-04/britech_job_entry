@@ -32,14 +32,15 @@ export function ShipperPage() {
 
   if (!shipNumber) return null;
 
-  const backTo = `/shippers${nav?.listSearch ?? ""}`;
+  const backToPo = nav?.from === "po-review" && nav.poId != null;
+  const backTo = backToPo ? `/po/${nav.poId}` : `/shippers${nav?.listSearch ?? ""}`;
   const status = shipper?.invoiced ? "I" : shipper?.status || "—";
 
   return (
     <div className="space-y-4">
       <Link to={backTo} className="inline-flex items-center gap-1 text-sm text-muted hover:text-accent">
         <ArrowLeft className="h-4 w-4" />
-        Back to Shippers
+        {backToPo ? "Back to PO" : "Back to Shippers"}
       </Link>
       {error ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p> : null}
       {shipper ? (

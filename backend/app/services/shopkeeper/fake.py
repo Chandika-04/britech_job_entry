@@ -5,7 +5,17 @@ from decimal import Decimal
 
 from app.config import get_settings
 from app.exceptions import AppError, ConflictError
-from app.services.shopkeeper.lookup import LOOKUP_LIMIT, paginate_jobs, paginate_parts, paginate_shippers, sort_price_history, starts_with
+from app.services.shopkeeper.lookup import (
+    LOOKUP_LIMIT,
+    _job_recency_key,
+    paginate_jobs,
+    paginate_parts,
+    paginate_po_groups,
+    paginate_shippers,
+    po_group_from_jobs,
+    sort_price_history,
+    starts_with,
+)
 from app.services.shopkeeper.ops_util import copy_op
 from app.services.shopkeeper.types import (
     CertText,
@@ -24,6 +34,7 @@ from app.services.shopkeeper.types import (
     PrintDocumentData,
     ShipWritePayload,
     ShopKeeperJobRow,
+    ShopKeeperPoPage,
     ShopKeeperShipperPage,
     ShopKeeperShipperRow,
     WorkCenter,
@@ -666,6 +677,46 @@ class FakeShopKeeper:
             page_size=page_size,
         )
 
+    def list_po_groups(
+        self,
+        *,
+        query: str | None = None,
+        search_by: str = "po",
+        page: int = 1,
+        page_size: int = 20,
+    ):
+        self.current_database()
+        return paginate_po_groups(
+            self.job_records,
+            query=query,
+            search_by=search_by,
+            page=page,
+            page_size=page_size,
+        )
+
+    def get_purchase_order(self, customer_code: str, po_number: str) -> ShopKeeperPoPage | None:
+        self.current_database()
+        code = (customer_code or "").strip()
+        po = (po_number or "").strip()
+        jobs = [
+            row
+            for row in self.job_records
+            if (row.customer_code or "").strip() == code and (row.po_number or "").strip() == po
+        ]
+        if not jobs:
+            return None
+        jobs = sorted(jobs, key=_job_recency_key, reverse=True)
+        group = po_group_from_jobs(jobs)
+        return ShopKeeperPoPage(
+            customer_code=group.customer_code,
+            customer_name=group.customer_name,
+            po_number=group.po_number,
+            job_count=group.job_count,
+            shipper_numbers=group.shipper_numbers,
+            order_date=group.order_date,
+            jobs=jobs,
+        )
+
     def _jobs_for_shipper(self, ship_number: str) -> list[ShopKeeperJobRow]:
         return [row for row in self.job_records if row.shipper_number == ship_number]
 
@@ -818,6 +869,10 @@ class FakeShopKeeper:
             return None
         ops = list(self.job_ops.get(job_number, []))
         pm = detail.pm_linkid
+        if pm is None:
+            part = self.get_part(detail.part_number, (detail.part_revision or "").strip() or "-")
+            pm = part.pm_linkid if part else None
+            detail.pm_linkid = pm
         detail.operations = ops
         detail.cert_linked = self.part_has_certification(pm) if pm else False
         detail.quality_hold = bool(self.part_holds.get(pm or 0, {}).get("hold"))
@@ -936,6 +991,28 @@ class FakeShopKeeper:
             saved.append(copied)
         self.job_ops[job_number] = saved
         self.job_details[job_number].operations = saved
+        return saved
+
+    def replace_part_ops_from_template(self, pm_linkid: int, template_id: int) -> list[OperationRow]:
+        self.current_database()
+        if self.get_part_editor(pm_linkid) is None:
+            raise AppError("Part not found.", status_code=404)
+        if pm_linkid in self.locked_parts:
+            raise AppError("This part is locked.", status_code=409)
+        steps = self.template_ops.get(template_id)
+        if steps is None:
+            raise AppError("Template not found.", status_code=404)
+        if not steps:
+            raise AppError("This template has no steps.", status_code=409)
+        for row in self.part_ops.get(pm_linkid, []):
+            if row.id in self.op_children:
+                raise AppError("Cannot delete this part operation because it has tooling or QC records.", status_code=409)
+        saved = []
+        for row in steps:
+            new_id = self.next_op_id
+            self.next_op_id += 1
+            saved.append(copy_op(row, new_id=new_id, om_link=new_id))
+        self.part_ops[pm_linkid] = saved
         return saved
 
     def get_part_editor(self, pm_linkid: int) -> PartEditorRecord | None:

@@ -15,7 +15,16 @@ from app.models.po_request import PoRequest, PoSource, ReviewState
 from app.services.extraction.warnings import refresh_duplicate_warnings
 from app.services.shopkeeper.matching import MatchResult, match_customer, normalize
 from app.services.shopkeeper.provider import ShopKeeperProvider, get_shopkeeper_provider
-from app.services.shopkeeper.types import CustomerRecord, JobWritePayload, PartRecord, PriceQuote, ShipLine, ShipWritePayload
+from app.services.shopkeeper.ops_util import note_to_shopkeeper_html
+from app.services.shopkeeper.types import (
+    CustomerRecord,
+    JobHeaderUpdate,
+    JobWritePayload,
+    PartRecord,
+    PriceQuote,
+    ShipLine,
+    ShipWritePayload,
+)
 from app.services.units import normalize_unit
 
 _LINE_LOCKS: dict[int, threading.Lock] = {}
@@ -304,18 +313,20 @@ def resolve_part(
     part = provider.get_part(part_number, part_revision)
     if part is None:
         raise AppError("Part/revision not found or is inactive in ShopKeeper.", status_code=404)
-    if line.erp_status in {"created", "creating"}:
-        raise ConflictError("This line already has a ShopKeeper job in progress or created.")
+    if line.erp_status == "creating":
+        raise ConflictError("This line already has a ShopKeeper job in progress.")
     line.resolved_part_number = part.part_number
     line.resolved_part_revision = part.part_revision
     line.resolved_pm_linkid = part.pm_linkid
-    if po.source == PoSource.manual:
+    if po.source == PoSource.manual or line.erp_status == "created":
         line.customer_part_number = part.part_number
         line.revision = part.part_revision
         line.description = part.description
         line.reviewer_edited = True
     find_duplicates(po, line, provider)
     refresh_line_status(line, po)
+    if line.erp_status == "created":
+        sync_created_line_job(po, line, provider)
     return line
 
 
@@ -450,6 +461,43 @@ def delete_shopkeeper_job_for_line(
         raise ConflictError("This line has no ShopKeeper job to delete.")
     deleted = delete_shopkeeper_job(db, line.erp_job_number, provider)
     return deleted if deleted is not None else line
+
+
+def sync_created_line_job(
+    po: PoRequest,
+    line: PoLineItem,
+    provider: ShopKeeperProvider | None = None,
+) -> None:
+    if line.erp_status != "created" or not line.erp_job_number:
+        return
+    provider = provider or get_shopkeeper_provider()
+    if not po.po_number:
+        raise ConflictError("PO number is required before saving ShopKeeper job changes.")
+    if not line.resolved_customer_code:
+        raise ConflictError("Match a ShopKeeper customer before saving ShopKeeper job changes.")
+    part_number = line.resolved_part_number or line.customer_part_number
+    part_revision = line.resolved_part_revision or line.revision or "-"
+    if not part_number:
+        raise ConflictError("Enter a part number.")
+    if po.order_date is None:
+        raise ConflictError("Enter the job date.")
+    provider.update_job_header(
+        line.erp_job_number,
+        JobHeaderUpdate(
+            customer_code=line.resolved_customer_code,
+            po_number=po.po_number,
+            po_line=str(line.line_number) if line.line_number is not None else None,
+            part_number=part_number,
+            part_revision=part_revision,
+            description=line.description,
+            quantity=_positive_int_quantity(line),
+            unit=normalize_unit(line.uom) or "Each",
+            unit_price=_unit_price(line),
+            order_date=po.order_date,
+            notes=note_to_shopkeeper_html(line.notes),
+            cert_required=bool(line.cert_required),
+        ),
+    )
 
 
 def _positive_int_quantity(line: PoLineItem) -> int:

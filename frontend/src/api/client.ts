@@ -13,7 +13,9 @@ import type {
   PoDraft,
   PoListResponse,
   PriceLookupResponse,
+  ShopKeeperPoGroupListResponse,
   ShopKeeperPoListResponse,
+  ShopKeeperPoPage,
   ShopKeeperShipperListResponse,
   ShopKeeperShipperPage,
 } from "@/types/po";
@@ -169,6 +171,13 @@ export const api = {
   listShopKeeperPurchaseOrders(params: URLSearchParams) {
     return request<ShopKeeperPoListResponse>(`/api/shopkeeper/purchase-orders?${params.toString()}`);
   },
+  listShopKeeperPoGroups(params: URLSearchParams) {
+    return request<ShopKeeperPoGroupListResponse>(`/api/shopkeeper/purchase-order-groups?${params.toString()}`);
+  },
+  getShopKeeperPo(customerCode: string, poNumber: string) {
+    const params = new URLSearchParams({ customer_code: customerCode, po: poNumber });
+    return request<ShopKeeperPoPage>(`/api/shopkeeper/purchase-orders/detail?${params.toString()}`);
+  },
   listShopKeeperShippers(params: URLSearchParams) {
     return request<ShopKeeperShipperListResponse>(`/api/shopkeeper/shippers?${params.toString()}`);
   },
@@ -289,6 +298,13 @@ export const api = {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ operations }),
+    });
+  },
+  copyPartTemplate(pmLinkId: number | string, templateId: number) {
+    return request<PartEditor["operations"]>(`/api/parts/${pmLinkId}/copy-template`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template_id: templateId }),
     });
   },
   setQualityHold(pmLinkId: number | string, hold: boolean, note?: string | null) {

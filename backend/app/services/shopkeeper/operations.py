@@ -169,6 +169,12 @@ def copy_part_instructions(job_number: str, provider: ShopKeeperProvider | None 
     return _ops_out(saved)
 
 
+def copy_part_template(pm_linkid: int, template_id: int, provider: ShopKeeperProvider | None = None) -> list[OperationOut]:
+    provider = provider or get_shopkeeper_provider()
+    saved = provider.replace_part_ops_from_template(pm_linkid, template_id)
+    return _ops_out(saved)
+
+
 def _job_ready_to_print(job_number: str, provider: ShopKeeperProvider):
     job = provider.get_job_page(job_number)
     if job is None:
@@ -251,6 +257,7 @@ def get_part_editor(pm_linkid: int, provider: ShopKeeperProvider | None = None) 
         linked_certs=[CertTextOut.model_validate(row, from_attributes=True) for row in part.linked_certs],
         cert_library=[CertTextOut.model_validate(row, from_attributes=True) for row in provider.list_certification_texts()],
         work_centers=[WorkCenterOut.model_validate(row, from_attributes=True) for row in provider.list_work_centers()],
+        templates=[OpTemplateOut.model_validate(row, from_attributes=True) for row in provider.list_op_templates()],
     )
 
 

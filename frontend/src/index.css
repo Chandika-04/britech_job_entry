@@ -184,6 +184,11 @@ textarea {
     border-color: var(--color-rule);
   }
 
+  [data-outlined-fields] .cell-input {
+    border-color: var(--color-rule);
+    background: #fff;
+  }
+
   .cell-input:focus {
     outline: none;
     border-color: var(--color-accent);

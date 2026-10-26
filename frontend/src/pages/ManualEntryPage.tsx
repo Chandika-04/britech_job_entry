@@ -319,7 +319,7 @@ export function ManualEntryPage() {
         </Notice>
       ) : null}
 
-      <ShipperCreatedBanner shipperNumber={po.shipper_number} />
+      <ShipperCreatedBanner shipperNumber={po.shipper_number} poId={po.id} />
       <WarningsBanner warnings={po.warnings} />
 
       <Card>
@@ -442,7 +442,8 @@ function ManualLineCard({
   onRun: RunLine;
   onNotice: (message: string) => void;
 }) {
-  const locked = line?.erp_status === "created" || line?.erp_status === "creating";
+  const locked = line?.erp_status === "creating";
+  const created = line?.erp_status === "created";
   const printWaiter = useRef<(() => void) | null>(null);
   const [printJob, setPrintJob] = useState<{ jobNumber: string; certAvailable: boolean } | null>(null);
   const askPrint = (jobNumber: string, certAvailable: boolean) =>
@@ -458,7 +459,7 @@ function ManualLineCard({
         <CardTitle>Line {item.line_number || index + 1}</CardTitle>
         <div className="flex items-center gap-2">
           {line ? <ErpBadge status={line.erp_status} /> : null}
-          <Button type="button" variant="ghost" size="sm" disabled={fieldsOff || !canDelete} onClick={onRemove}>
+          <Button type="button" variant="ghost" size="sm" disabled={fieldsOff || created || !canDelete} onClick={onRemove}>
             <Trash2 className="h-3.5 w-3.5" />
             Delete
           </Button>

@@ -1,6 +1,12 @@
 from datetime import date
 
-from app.services.shopkeeper.types import PartMasterListRow, PriceQuote, ShopKeeperJobRow, ShopKeeperShipperRow
+from app.services.shopkeeper.types import (
+    PartMasterListRow,
+    PriceQuote,
+    ShopKeeperJobRow,
+    ShopKeeperPoGroupRow,
+    ShopKeeperShipperRow,
+)
 
 SEARCH_FIELDS = ("po", "part", "job", "customer")
 SHIPPER_SEARCH_FIELDS = ("shipper", "po", "job", "customer")
@@ -132,6 +138,53 @@ def paginate_parts(
     total = len(matched)
     start = max(0, (page - 1) * page_size)
     return matched[start : start + page_size], total
+
+
+def po_group_key(job: ShopKeeperJobRow) -> tuple[str, str]:
+    return ((job.customer_code or "").strip(), (job.po_number or "").strip())
+
+
+def po_group_from_jobs(jobs: list[ShopKeeperJobRow]) -> ShopKeeperPoGroupRow:
+    ordered = sorted(jobs, key=_job_recency_key, reverse=True)
+    first = ordered[0]
+    shippers = sorted({row.shipper_number for row in jobs if row.shipper_number})
+    dates = [row.order_date for row in jobs if row.order_date]
+    return ShopKeeperPoGroupRow(
+        customer_code=first.customer_code,
+        customer_name=next((row.customer_name for row in ordered if row.customer_name), first.customer_name),
+        po_number=first.po_number,
+        job_count=len(jobs),
+        shipper_numbers=", ".join(shippers) if shippers else None,
+        order_date=max(dates) if dates else first.order_date,
+    )
+
+
+def paginate_po_groups(
+    jobs: list[ShopKeeperJobRow],
+    *,
+    query: str | None,
+    search_by: str | None,
+    page: int,
+    page_size: int,
+) -> tuple[list[ShopKeeperPoGroupRow], int]:
+    q = (query or "").strip()
+    field = normalize_search_by(search_by)
+    matching_keys = {po_group_key(job) for job in jobs if not q or job_matches_field(job, q, field)}
+    grouped: dict[tuple[str, str], list[ShopKeeperJobRow]] = {}
+    for job in jobs:
+        key = po_group_key(job)
+        if key not in matching_keys:
+            continue
+        grouped.setdefault(key, []).append(job)
+    ranked = [
+        (po_group_from_jobs(items), max(_job_recency_key(job) for job in items))
+        for items in grouped.values()
+    ]
+    ranked.sort(key=lambda pair: pair[1], reverse=True)
+    rows = [row for row, _recency in ranked]
+    total = len(rows)
+    start = max(0, (page - 1) * page_size)
+    return rows[start : start + page_size], total
 
 
 def paginate_jobs(

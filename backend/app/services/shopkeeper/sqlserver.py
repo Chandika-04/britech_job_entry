@@ -9,6 +9,7 @@ from app.services.shopkeeper.lookup import (
     LOOKUP_LIMIT,
     normalize_search_by,
     normalize_shipper_search_by,
+    po_group_from_jobs,
     prefix_like,
     sort_price_history,
 )
@@ -20,6 +21,8 @@ from app.services.shopkeeper.types import (
     PriceQuote,
     ShipWritePayload,
     ShopKeeperJobRow,
+    ShopKeeperPoGroupRow,
+    ShopKeeperPoPage,
     ShopKeeperShipperPage,
     ShopKeeperShipperRow,
 )
@@ -41,6 +44,66 @@ FROM dbo.Customers
 """
 
 CUSTOMER_SELECT = CUSTOMER_COLUMNS + " WHERE [Customer Record Type] IN (N'Both', N'Bill To')"
+
+_JOB_CUSTOMER_JOIN = """
+            LEFT JOIN (
+                SELECT [Customer Number], MAX(Company) AS Company
+                FROM dbo.Customers
+                WHERE [Customer Record Type] IN (N'Both', N'Bill To')
+                GROUP BY [Customer Number]
+            ) C ON C.[Customer Number] = J.Jb_Cust_Code
+        """
+
+_PO_KEY_SQL = "ISNULL(NULLIF(LTRIM(RTRIM(J.Jb_PO_Num)), ''), '')"
+
+_JOB_LIST_COLUMNS = f"""
+                    {_PO_KEY_SQL} AS po_key,
+                    J.Jb_Job_Num,
+                    JS.Sh_PO_Line,
+                    J.Jb_Cust_Code,
+                    C.Company,
+                    J.Jb_Part_Num,
+                    J.Jb_Part_Rev,
+                    J.Jb_Part_Desc,
+                    J.Jb_Qty_Order,
+                    JS.Sh_Status,
+                    J.Jb_Order_Date,
+                    J.Jb_Cert_Required,
+                    JS.Sh_Ship_Num
+"""
+
+
+def _job_search_clause(query: str | None, search_by: str) -> tuple[str, list[object]]:
+    q = (query or "").strip()
+    if not q:
+        return "", []
+    field = normalize_search_by(search_by)
+    like = f"%{q}%"
+    if field == "po":
+        return "AND J.Jb_PO_Num LIKE ?", [like]
+    if field == "part":
+        return "AND J.Jb_Part_Num LIKE ?", [like]
+    if field == "job":
+        return "AND J.Jb_Job_Num LIKE ?", [like]
+    return "AND (J.Jb_Cust_Code LIKE ? OR C.Company LIKE ?)", [like, like]
+
+
+def _job_row_from_list(row) -> ShopKeeperJobRow:
+    return ShopKeeperJobRow(
+        job_number=str(row[1] or "").strip(),
+        po_number=str(row[0] or ""),
+        po_line=_as_optional_str(row[2]),
+        customer_code=str(row[3] or "").strip(),
+        customer_name=_as_optional_str(row[4]),
+        part_number=str(row[5] or "").strip(),
+        part_revision=str(row[6] or "").strip(),
+        description=_as_optional_str(row[7]),
+        quantity=int(row[8]) if row[8] is not None else None,
+        status=str(row[9] or "").strip(),
+        order_date=_as_date(row[10]),
+        cert_required=_as_bool(row[11]),
+        shipper_number=_as_optional_str(row[12]),
+    )
 
 
 def _as_bool(value: object) -> bool:
@@ -714,92 +777,157 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[ShopKeeperJobRow], int]:
-        q = (query or "").strip()
-        field = normalize_search_by(search_by)
-        like = f"%{q}%"
         offset = max(0, (page - 1) * page_size)
-        search_params: list[object] = []
-        search_sql = ""
-        if q:
-            if field == "po":
-                search_sql = "AND J.Jb_PO_Num LIKE ?"
-                search_params.append(like)
-            elif field == "part":
-                search_sql = "AND J.Jb_Part_Num LIKE ?"
-                search_params.append(like)
-            elif field == "job":
-                search_sql = "AND J.Jb_Job_Num LIKE ?"
-                search_params.append(like)
-            else:
-                search_sql = "AND (J.Jb_Cust_Code LIKE ? OR C.Company LIKE ?)"
-                search_params.extend([like, like])
-
-        customer_join = """
-            LEFT JOIN (
-                SELECT [Customer Number], MAX(Company) AS Company
-                FROM dbo.Customers
-                WHERE [Customer Record Type] IN (N'Both', N'Bill To')
-                GROUP BY [Customer Number]
-            ) C ON C.[Customer Number] = J.Jb_Cust_Code
-        """
-        po_key_sql = "ISNULL(NULLIF(LTRIM(RTRIM(J.Jb_PO_Num)), ''), '')"
+        search_sql, search_params = _job_search_clause(query, search_by)
         conn, _ = self._connect()
         try:
             cur = conn.cursor()
-            count_sql = f"""
+            cur.execute(
+                f"""
                 SELECT COUNT(*)
                 FROM dbo.Jobs J
-                {customer_join}
+                {_JOB_CUSTOMER_JOIN}
                 WHERE 1 = 1
                 {search_sql}
-            """
-            cur.execute(count_sql, *search_params)
+                """,
+                *search_params,
+            )
             total = int(cur.fetchone()[0] or 0)
-
-            job_sql = f"""
+            cur.execute(
+                f"""
                 SELECT
-                    {po_key_sql} AS po_key,
-                    J.Jb_Job_Num,
-                    JS.Sh_PO_Line,
-                    J.Jb_Cust_Code,
-                    C.Company,
-                    J.Jb_Part_Num,
-                    J.Jb_Part_Rev,
-                    J.Jb_Part_Desc,
-                    J.Jb_Qty_Order,
-                    JS.Sh_Status,
-                    J.Jb_Order_Date,
-                    J.Jb_Cert_Required,
-                    JS.Sh_Ship_Num
+                    {_JOB_LIST_COLUMNS}
                 FROM dbo.Jobs J
-                {customer_join}
+                {_JOB_CUSTOMER_JOIN}
                 LEFT JOIN dbo.JobShip JS
                     ON JS.Sh_Job_Num = J.Jb_Job_Num AND JS.Sh_ReleaseInt = 1
                 WHERE 1 = 1
                 {search_sql}
                 ORDER BY TRY_CONVERT(bigint, J.Jb_Job_Num) DESC, J.Jb_Job_Num DESC
                 OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
-            """
-            cur.execute(job_sql, *search_params, offset, page_size)
-            jobs = [
-                ShopKeeperJobRow(
-                    job_number=str(row[1] or "").strip(),
-                    po_number=str(row[0] or ""),
-                    po_line=_as_optional_str(row[2]),
-                    customer_code=str(row[3] or "").strip(),
-                    customer_name=_as_optional_str(row[4]),
-                    part_number=str(row[5] or "").strip(),
-                    part_revision=str(row[6] or "").strip(),
-                    description=_as_optional_str(row[7]),
-                    quantity=int(row[8]) if row[8] is not None else None,
-                    status=str(row[9] or "").strip(),
-                    order_date=_as_date(row[10]),
-                    cert_required=_as_bool(row[11]),
-                    shipper_number=_as_optional_str(row[12]),
+                """,
+                *search_params,
+                offset,
+                page_size,
+            )
+            return [_job_row_from_list(row) for row in cur.fetchall()], total
+        finally:
+            conn.close()
+
+    def list_po_groups(
+        self,
+        *,
+        query: str | None = None,
+        search_by: str = "po",
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[ShopKeeperPoGroupRow], int]:
+        offset = max(0, (page - 1) * page_size)
+        search_sql, search_params = _job_search_clause(query, search_by)
+        keys_sql = f"""
+            SELECT DISTINCT J.Jb_Cust_Code AS cust_code, {_PO_KEY_SQL} AS po_key
+            FROM dbo.Jobs J
+            {_JOB_CUSTOMER_JOIN}
+            WHERE 1 = 1
+            {search_sql}
+        """
+        conn, _ = self._connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(f"SELECT COUNT(*) FROM ({keys_sql}) k", *search_params)
+            total = int(cur.fetchone()[0] or 0)
+            cur.execute(
+                f"""
+                WITH keys AS (
+                    {keys_sql}
+                )
+                SELECT
+                    k.cust_code,
+                    k.po_key,
+                    MAX(C.Company),
+                    COUNT(*),
+                    (
+                        SELECT STRING_AGG(ship, N', ') WITHIN GROUP (ORDER BY ship)
+                        FROM (
+                            SELECT DISTINCT NULLIF(LTRIM(RTRIM(js.Sh_Ship_Num)), N'') AS ship
+                            FROM dbo.Jobs j2
+                            LEFT JOIN dbo.JobShip js
+                                ON js.Sh_Job_Num = j2.Jb_Job_Num AND js.Sh_ReleaseInt = 1
+                            WHERE j2.Jb_Cust_Code = k.cust_code
+                              AND ISNULL(NULLIF(LTRIM(RTRIM(j2.Jb_PO_Num)), ''), '') = k.po_key
+                        ) s
+                        WHERE ship IS NOT NULL
+                    ),
+                    MAX(J.Jb_Order_Date)
+                FROM keys k
+                JOIN dbo.Jobs J
+                    ON J.Jb_Cust_Code = k.cust_code
+                   AND {_PO_KEY_SQL} = k.po_key
+                LEFT JOIN (
+                    SELECT [Customer Number], MAX(Company) AS Company
+                    FROM dbo.Customers
+                    WHERE [Customer Record Type] IN (N'Both', N'Bill To')
+                    GROUP BY [Customer Number]
+                ) C ON C.[Customer Number] = k.cust_code
+                GROUP BY k.cust_code, k.po_key
+                ORDER BY MAX(TRY_CONVERT(bigint, J.Jb_Job_Num)) DESC, MAX(J.Jb_Job_Num) DESC
+                OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+                """,
+                *search_params,
+                offset,
+                page_size,
+            )
+            rows = [
+                ShopKeeperPoGroupRow(
+                    customer_code=str(row[0] or "").strip(),
+                    po_number=str(row[1] or ""),
+                    customer_name=_as_optional_str(row[2]),
+                    job_count=int(row[3] or 0),
+                    shipper_numbers=_as_optional_str(row[4]),
+                    order_date=_as_date(row[5]),
                 )
                 for row in cur.fetchall()
             ]
-            return jobs, total
+            return rows, total
+        finally:
+            conn.close()
+
+    def get_purchase_order(self, customer_code: str, po_number: str) -> ShopKeeperPoPage | None:
+        code = (customer_code or "").strip()
+        po = (po_number or "").strip()
+        if not code:
+            return None
+        conn, _ = self._connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                f"""
+                SELECT
+                    {_JOB_LIST_COLUMNS}
+                FROM dbo.Jobs J
+                {_JOB_CUSTOMER_JOIN}
+                LEFT JOIN dbo.JobShip JS
+                    ON JS.Sh_Job_Num = J.Jb_Job_Num AND JS.Sh_ReleaseInt = 1
+                WHERE J.Jb_Cust_Code = ?
+                  AND {_PO_KEY_SQL} = ?
+                ORDER BY TRY_CONVERT(bigint, J.Jb_Job_Num) DESC, J.Jb_Job_Num DESC
+                """,
+                code,
+                po,
+            )
+            jobs = [_job_row_from_list(row) for row in cur.fetchall()]
+            if not jobs:
+                return None
+            group = po_group_from_jobs(jobs)
+            return ShopKeeperPoPage(
+                customer_code=group.customer_code,
+                customer_name=group.customer_name,
+                po_number=group.po_number,
+                job_count=group.job_count,
+                shipper_numbers=group.shipper_numbers,
+                order_date=group.order_date,
+                jobs=jobs,
+            )
         finally:
             conn.close()
 

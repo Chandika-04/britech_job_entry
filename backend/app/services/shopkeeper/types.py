@@ -148,6 +148,27 @@ class ShopKeeperJobRow:
 
 
 @dataclass
+class ShopKeeperPoGroupRow:
+    customer_code: str
+    customer_name: str | None
+    po_number: str
+    job_count: int
+    shipper_numbers: str | None
+    order_date: date | None
+
+
+@dataclass
+class ShopKeeperPoPage:
+    customer_code: str
+    customer_name: str | None
+    po_number: str
+    job_count: int
+    shipper_numbers: str | None
+    order_date: date | None
+    jobs: list[ShopKeeperJobRow]
+
+
+@dataclass
 class ShopKeeperShipperRow:
     shipper_number: str
     status: str | None

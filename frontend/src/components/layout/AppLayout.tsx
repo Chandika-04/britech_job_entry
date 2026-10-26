@@ -25,6 +25,7 @@ function AppShell() {
   const jobNav = jobNavFromPath(pathname, location.state);
   const isPartsList = pathname === "/parts";
   const onParts = pathname === "/parts" || pathname.startsWith("/parts/");
+  const isPoSummary = pathname === "/purchase-orders/detail";
   const isFullList =
     pathname === "/" || pathname.startsWith("/purchase-orders") || pathname === "/shippers" || isPartsList;
   const onShippers = pathname.startsWith("/shippers") || jobNav?.from === "shippers";
@@ -69,7 +70,9 @@ function AppShell() {
             <NavLink
               to={{ pathname: "/purchase-orders", search: "" }}
               className={({ isActive }) =>
-                tabClass({ isActive: (isActive || jobNav?.from === "purchase-orders") && !onShippers })
+                tabClass({
+                  isActive: (isActive || isPoSummary || jobNav?.from === "purchase-orders" || jobNav?.from === "po-summary") && !onShippers,
+                })
               }
             >
               ShopKeeper jobs

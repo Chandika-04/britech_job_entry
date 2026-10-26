@@ -17,7 +17,10 @@ from app.schemas.shopkeeper import (
     ResolvePartIn,
     SetCertRequiredIn,
     ShopKeeperJobOut,
+    ShopKeeperPoGroupListResponse,
+    ShopKeeperPoGroupOut,
     ShopKeeperPoListResponse,
+    ShopKeeperPoPageOut,
     ShopKeeperShipperListResponse,
     ShopKeeperShipperOut,
     ShopKeeperShipperPageOut,
@@ -73,6 +76,37 @@ def shopkeeper_purchase_orders(
         query=q,
         search_by=field,
     )
+
+
+@router.get("/shopkeeper/purchase-order-groups", response_model=ShopKeeperPoGroupListResponse)
+def shopkeeper_po_groups(
+    q: str | None = Query(None),
+    search_by: str = Query("po"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(300, ge=1, le=300),
+) -> ShopKeeperPoGroupListResponse:
+    field = normalize_search_by(search_by)
+    provider = get_shopkeeper_provider()
+    rows, total = provider.list_po_groups(query=q, search_by=field, page=page, page_size=page_size)
+    return ShopKeeperPoGroupListResponse(
+        items=[ShopKeeperPoGroupOut.model_validate(row, from_attributes=True) for row in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+        query=q,
+        search_by=field,
+    )
+
+
+@router.get("/shopkeeper/purchase-orders/detail", response_model=ShopKeeperPoPageOut)
+def shopkeeper_po_detail(
+    customer_code: str = Query(..., min_length=1),
+    po: str = Query(""),
+) -> ShopKeeperPoPageOut:
+    page = get_shopkeeper_provider().get_purchase_order(customer_code, po)
+    if page is None:
+        raise NotFoundError("Purchase order not found.")
+    return ShopKeeperPoPageOut.model_validate(page, from_attributes=True)
 
 
 @router.get("/shopkeeper/shippers", response_model=ShopKeeperShipperListResponse)

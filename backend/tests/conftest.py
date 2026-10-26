@@ -17,6 +17,7 @@ os.environ.setdefault("ANTHROPIC_API_KEY", "")
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("SHOPKEEPER_PROVIDER", "fake")
 os.environ.setdefault("SHOPKEEPER_EXPECTED_DATABASE", "SkData_Test")
+os.environ.setdefault("WAREHOUSE_PRINTER_NAME", "fake")
 
 from app.config import get_settings  # noqa: E402
 from app.database.base import Base  # noqa: E402
@@ -36,11 +37,15 @@ def settings(tmp_path, monkeypatch):
     monkeypatch.setenv("SHOPKEEPER_EXPECTED_DATABASE", "SkData_Test")
     monkeypatch.setenv("PDF_STORAGE_DIR", str(tmp_path / "pdfs"))
     monkeypatch.setenv("PDF_BACKUP_DIR", str(tmp_path / "pdf-backup"))
+    monkeypatch.setenv("WAREHOUSE_PRINTER_NAME", "fake")
     get_settings.cache_clear()
     reset_engine()
     from app.services.shopkeeper.fake import FakeShopKeeper
 
     FakeShopKeeper.reset_shared()
+    from app.services.print.printer import FakePrinter
+
+    FakePrinter.reset_shared()
     engine = get_engine()
     Base.metadata.create_all(engine)
     yield get_settings()

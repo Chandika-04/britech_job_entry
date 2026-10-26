@@ -130,6 +130,7 @@ class PartEditorOut(BaseModel):
     linked_certs: list[CertTextOut] = Field(default_factory=list)
     cert_library: list[CertTextOut] = Field(default_factory=list)
     work_centers: list[WorkCenterOut] = Field(default_factory=list)
+    templates: list[OpTemplateOut] = Field(default_factory=list)
 
 
 class PartHeaderIn(BaseModel):
