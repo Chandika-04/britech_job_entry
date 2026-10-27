@@ -1,6 +1,9 @@
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
+import pytest
+
+from app.exceptions import ConflictError
 from app.models.llm_call import LlmCall
 from app.models.po_request import PoStatus, ReviewState
 from app.schemas.po import LineItemIn, PoUpdate
@@ -132,6 +135,64 @@ def test_review_edits_and_confirmation_reset(db, settings):
     po = save_draft(db, po, payload)
     assert po.review_state == ReviewState.unreviewed
     assert len(po.line_items) == 3
+
+
+def _line_payload(item) -> LineItemIn:
+    return LineItemIn(
+        id=item.id,
+        line_number=item.line_number,
+        customer_part_number=item.customer_part_number,
+        revision=item.revision,
+        description=item.description,
+        quantity=item.quantity,
+        unit_price=item.unit_price,
+        uom=item.uom,
+        due_date=item.due_date,
+        notes=item.notes,
+    )
+
+
+def test_save_draft_deletes_omitted_line(db, settings):
+    po = _extract(db, settings)
+    assert len(po.line_items) == 2
+    keep = po.line_items[0]
+    payload = PoUpdate(
+        po_number=po.po_number,
+        customer_name=po.customer_name,
+        order_date=po.order_date,
+        requested_ship_date=po.requested_ship_date,
+        buyer_contact=po.buyer_contact,
+        buyer_notes=po.buyer_notes,
+        bill_to=po.bill_to,
+        ship_to=po.ship_to,
+        line_items=[_line_payload(keep)],
+    )
+    po = save_draft(db, po, payload)
+    assert [item.id for item in po.line_items] == [keep.id]
+    assert po.review_state == ReviewState.unreviewed
+
+
+def test_save_draft_refuses_deleting_created_line(db, settings):
+    po = _extract(db, settings)
+    created = po.line_items[0]
+    created.erp_status = "created"
+    created.erp_job_number = "200001"
+    db.add(created)
+    db.commit()
+    keep = po.line_items[1]
+    payload = PoUpdate(
+        po_number=po.po_number,
+        customer_name=po.customer_name,
+        order_date=po.order_date,
+        requested_ship_date=po.requested_ship_date,
+        buyer_contact=po.buyer_contact,
+        buyer_notes=po.buyer_notes,
+        bill_to=po.bill_to,
+        ship_to=po.ship_to,
+        line_items=[_line_payload(keep)],
+    )
+    with pytest.raises(ConflictError, match="ShopKeeper job"):
+        save_draft(db, po, payload)
 
 
 def test_reextract_preserves_history_and_resets_review(db, settings, client):

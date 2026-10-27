@@ -342,6 +342,8 @@ def apply_update(db: Session, po: PoRequest, payload: PoUpdate) -> tuple[bool, l
     incoming_ids = {item.id for item in payload.line_items if item.id}
     for item in list(po.line_items):
         if item.id not in incoming_ids:
+            if item.erp_status in ("created", "creating"):
+                raise ConflictError("Cannot delete a line that already has a ShopKeeper job.")
             db.query(ErpWriteAudit).filter(ErpWriteAudit.line_item_id == item.id).update(
                 {ErpWriteAudit.line_item_id: None}, synchronize_session=False
             )

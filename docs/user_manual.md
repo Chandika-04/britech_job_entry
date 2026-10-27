@@ -157,7 +157,7 @@ Every PO line is one row. Every cell is editable, including lines that already h
 
 Click a cell to type. The highlighted row (accent bar) is the line you are on. Opening details is separate: click the chevron or press **Enter**. Only one line's details are open at a time.
 
-**Add line** adds a line the app missed. **Save** copies the ShopKeeper customer (and cert default) from the other lines. You still need **PO is correct**, then match the part, then **Create job and print**.
+**Add line** adds a line the app missed. Open a line's details and **Delete line** to drop one the app invented or that does not belong on this PO. Lines with a ShopKeeper job stay; delete the job first if you need that. **Save** copies the ShopKeeper customer (and cert default) from the other lines. You still need **PO is correct**, then match the part, then **Create job and print**.
 
 **How the app fills in line items**
 
@@ -281,6 +281,7 @@ Sometimes a line can't be entered yet. For example, the part isn't in ShopKeeper
 | "The original PDF file is missing from storage" | The PDF file was moved or deleted from the PDF folder. Tell whoever manages the warehouse PC; it can be restored from the DiskStation copy. |
 | A job was created with the wrong details | Open the job and **Save job details** (price, qty, date, notes, cert, part, customer, PO). Job number and shipper number cannot be changed here. If a shipper already exists, confirm the warning; the shipper quantity is updated too. Office only: **Delete ShopKeeper job** removes the job in ShopKeeper (same as ShopKeeper Delete Job) and clears it here so you can create again. It is refused if the job is on a shipper — unlink that in ShopKeeper first. **Clear job from this app** only drops this app’s job number; use it when the job is already gone from ShopKeeper. |
 | A page was missed and you need another line | **Add line**, enter qty/price, **Save**, **PO is correct**, **Use** the part, then **Create job**. The ShopKeeper customer is copied from the other lines. If a shipper already exists, click **Add to shipper** on the work list after the new job is created. |
+| An extra line was extracted | Open that line's details, **Delete line**, then **Save**. You cannot delete a line after its ShopKeeper job exists. |
 | Customer or part isn't found | Open the **Parts** tab to add the part, then search again. Customers still need to be added in ShopKeeper. |
 
 > **Be careful with Re-extract and Delete.** Re-extract replaces the line items, and Delete removes the PO and its history. Neither changes jobs already in ShopKeeper, but this app will lose track of which jobs it created for that PO.

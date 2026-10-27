@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import type { LineItemDraft, PartCandidate, PoDetail, PoDraft } from "@/types/po";
 
-import { emptyLine, firstNeedsAttentionIndex, lineForItem } from "./helpers";
+import { emptyLine, firstNeedsAttentionIndex, isLineCreated, isLineLocked, lineForItem } from "./helpers";
 
 export function LinesCard({
   po,
@@ -105,6 +105,23 @@ export function LinesCard({
     });
   };
 
+  const removeItem = (index: number) => {
+    const item = draft.line_items[index];
+    if (!item) return;
+    const line = lineForItem(po, item);
+    if (isLineLocked(line) || isLineCreated(line)) return;
+    const line_items = draft.line_items.filter((_, itemIndex) => itemIndex !== index);
+    onChangeDraft({ ...draft, line_items });
+    const shift = (current: number | null) => {
+      if (current == null) return current;
+      if (current === index) return null;
+      return current > index ? current - 1 : current;
+    };
+    setHighlightedIndex((current) => shift(current));
+    setOpenIndex((current) => shift(current));
+    setMatcherIndex((current) => shift(current));
+  };
+
   const usePartAndClose = (index: number, part: PartCandidate) => {
     void onUsePart(index, part);
     setMatcherIndex(null);
@@ -178,6 +195,7 @@ export function LinesCard({
               setOpenIndex(index);
             }}
             onUpdate={updateItem}
+            onRemove={removeItem}
             onUsePart={usePartAndClose}
             onBeforeCreatePart={onBeforeCreatePart}
             onRun={onRun}

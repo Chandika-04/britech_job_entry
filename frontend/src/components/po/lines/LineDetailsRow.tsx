@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { api } from "@/api/client";
@@ -24,6 +25,7 @@ export function LineDetailsBody({
   saveTick,
   onToggleMatcher,
   onUpdate,
+  onRemove,
   onUsePart,
   onBeforeCreatePart,
   onRun,
@@ -45,6 +47,7 @@ export function LineDetailsBody({
   saveTick?: number;
   onToggleMatcher: () => void;
   onUpdate: (field: keyof LineItemDraft, value: string) => void;
+  onRemove?: () => void;
   onUsePart: (index: number, part: PartCandidate) => void | Promise<void>;
   onBeforeCreatePart?: () => Promise<boolean>;
   onRun: RunLine;
@@ -129,6 +132,7 @@ export function LineDetailsBody({
   const pictures = job?.pictures ?? part?.pictures ?? [];
   const pmLinkId = job?.pm_linkid ?? line?.resolved_pm_linkid ?? null;
 
+  const canDelete = Boolean(onRemove) && !created && !locked && !disabled;
   const heading = (
     <div className={cn("flex flex-wrap items-baseline justify-between gap-2", stacked ? "px-1" : "px-3 pt-3")}>
       <p className="text-[13px] font-semibold">
@@ -136,12 +140,20 @@ export function LineDetailsBody({
         {revLabel ? <span className="font-mono font-normal text-muted"> rev {revLabel}</span> : null}
         {item.description ? <span className="ml-2 font-normal text-muted">{item.description}</span> : null}
       </p>
-      {stacked ? null : (
-        <p className="text-[11px] text-muted">
-          ↑ ↓ move between lines · ← → move between fields · Enter opens or closes details · Esc closes · Ctrl+S saves ·
-          Ctrl+Enter confirms · Ctrl+Shift+P hides PDF
-        </p>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {canDelete ? (
+          <Button type="button" variant="danger" size="sm" onClick={onRemove}>
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete line
+          </Button>
+        ) : null}
+        {stacked ? null : (
+          <p className="text-[11px] text-muted">
+            ↑ ↓ move between lines · ← → move between fields · Enter opens or closes details · Esc closes · Ctrl+S saves ·
+            Ctrl+Enter confirms · Ctrl+Shift+P hides PDF
+          </p>
+        )}
+      </div>
     </div>
   );
 

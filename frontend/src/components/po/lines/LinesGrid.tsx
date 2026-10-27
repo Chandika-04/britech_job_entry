@@ -29,6 +29,7 @@ export function LinesGrid({
   onToggleOpen,
   onToggleMatcher,
   onUpdate,
+  onRemove,
   onUsePart,
   onBeforeCreatePart,
   onRun,
@@ -54,6 +55,7 @@ export function LinesGrid({
   onToggleOpen: (index: number) => void;
   onToggleMatcher: (index: number) => void;
   onUpdate: (index: number, field: keyof LineItemDraft, value: string) => void;
+  onRemove: (index: number) => void;
   onUsePart: (index: number, part: PartCandidate) => void | Promise<void>;
   onBeforeCreatePart?: () => Promise<boolean>;
   onRun: RunLine;
@@ -178,6 +180,7 @@ export function LinesGrid({
                   saveTick={saveTick}
                   onToggleMatcher={() => onToggleMatcher(index)}
                   onUpdate={(field, value) => onUpdate(index, field, value)}
+                  onRemove={() => onRemove(index)}
                   onUsePart={onUsePart}
                   onBeforeCreatePart={onBeforeCreatePart}
                   onRun={onRun}
@@ -401,6 +404,7 @@ export function LinesGrid({
                         saveTick={saveTick}
                         onToggleMatcher={() => onToggleMatcher(index)}
                         onUpdate={(field, value) => onUpdate(index, field, value)}
+                        onRemove={() => onRemove(index)}
                         onUsePart={onUsePart}
                         onBeforeCreatePart={onBeforeCreatePart}
                         onRun={onRun}
