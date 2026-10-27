@@ -11,6 +11,7 @@ interface Props {
   onChange: (draft: PoDraft) => void;
   disabled?: boolean;
   compact?: boolean;
+  dense?: boolean;
 }
 
 function Field({
@@ -30,6 +31,15 @@ function Field({
   );
 }
 
+function DenseField({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <label className={cn("grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2", className)}>
+      <span className="field-label mb-0">{label}</span>
+      {children}
+    </label>
+  );
+}
+
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-2">
@@ -39,8 +49,70 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-export function PoHeaderForm({ draft, onChange, disabled, compact }: Props) {
+export function PoHeaderForm({ draft, onChange, disabled, compact, dense }: Props) {
   const set = (field: keyof PoDraft, value: string) => onChange({ ...draft, [field]: value });
+
+  if (dense) {
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-1.5 sm:grid-cols-2 xl:grid-cols-3">
+          <DenseField label="PO number">
+            <Input
+              id="po-number"
+              data-focus="po-number"
+              className="h-8 font-mono"
+              value={draft.po_number}
+              disabled={disabled}
+              onChange={(event) => set("po_number", event.target.value)}
+            />
+          </DenseField>
+          <DenseField label="Customer">
+            <Input
+              value={draft.customer_name}
+              disabled={disabled}
+              className="h-8"
+              onChange={(event) => set("customer_name", event.target.value)}
+            />
+          </DenseField>
+          <DenseField label="Order date">
+            <Input
+              className="h-8 font-mono"
+              type="date"
+              value={draft.order_date}
+              disabled={disabled}
+              onChange={(event) => set("order_date", event.target.value)}
+            />
+          </DenseField>
+          <DenseField label="Ship date">
+            <Input
+              className="h-8 font-mono"
+              type="date"
+              value={draft.requested_ship_date}
+              disabled={disabled}
+              onChange={(event) => set("requested_ship_date", event.target.value)}
+            />
+          </DenseField>
+          <DenseField label="Buyer">
+            <Input
+              className="h-8"
+              value={draft.buyer_contact}
+              disabled={disabled}
+              onChange={(event) => set("buyer_contact", event.target.value)}
+            />
+          </DenseField>
+          <DenseField label="Bill to">
+            <Input className="h-8" value={draft.bill_to} disabled={disabled} onChange={(event) => set("bill_to", event.target.value)} />
+          </DenseField>
+          <DenseField label="Ship to" className="sm:col-span-2 xl:col-span-1">
+            <Input className="h-8" value={draft.ship_to} disabled={disabled} onChange={(event) => set("ship_to", event.target.value)} />
+          </DenseField>
+          <DenseField label="Notes" className="sm:col-span-2 xl:col-span-3">
+            <Input className="h-8" value={draft.buyer_notes} disabled={disabled} onChange={(event) => set("buyer_notes", event.target.value)} />
+          </DenseField>
+        </div>
+      </div>
+    );
+  }
 
   const addresses = (
       <Group title="Addresses & notes">

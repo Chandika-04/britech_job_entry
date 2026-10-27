@@ -198,14 +198,14 @@ export function PartMatchSection({
           />
         </div>
         <Button type="button" variant="outline" disabled={disabled || searching || !partNumber.trim()} onClick={() => void searchParts()}>
-          {searching ? "Finding…" : "Find part"}
+          {searching ? "Searching…" : "Search"}
         </Button>
       </div>
       {error ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs text-orange-950">
           <span>{error}</span>
           {createPartControl ? (
-            <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => void createNewPart()}>
+            <Button type="button" size="sm" disabled={disabled} onClick={() => void createNewPart()}>
               Create new part
             </Button>
           ) : null}

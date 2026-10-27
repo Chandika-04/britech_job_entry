@@ -79,7 +79,7 @@ export function PrintJobDialog({
           showingPreview ? "max-w-[960px]" : "max-w-xl",
         )}
       >
-        <div className="card-header bg-card-header px-4 py-2.5 text-white">
+        <div className="card-header bg-card-header px-4 py-2.5 text-card-header-ink">
           <h3 className="text-sm font-semibold">Traveler documents</h3>
         </div>
         <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">

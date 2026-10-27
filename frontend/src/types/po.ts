@@ -102,6 +102,7 @@ export interface LineItemDraft {
   uom: string;
   due_date: string;
   notes: string;
+  cert_required?: boolean;
 }
 
 export interface PoDraft {

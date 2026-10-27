@@ -158,6 +158,7 @@ export function CustomerMatchSection({ po, disabled, onChange, onError, onNotice
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
         <span>
           Customer: <span className="font-mono font-semibold">{resolvedCodes.join(", ")}</span>
+          <span className="text-emerald-800"> ✓ Matched</span>
           {name ? <> — <span className="font-bold">{name}</span></> : null}
         </span>
         <button

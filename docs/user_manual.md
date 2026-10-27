@@ -123,7 +123,7 @@ A part number plus revision can only exist once as a Production part. If that pa
 
 ## 7. Reviewing a PO
 
-The review page shows the **original PDF** on the left and the **fields the app read** on the right, so you can compare them side by side.
+The review page shows the **original PDF** on the left and a **PO header** plus a **Lines** grid on the right, so you can compare them side by side. On a phone, use **View PDF** and **PO header** at the top; the lines stay on the page.
 
 ### The PDF viewer
 
@@ -137,21 +137,27 @@ If a shipper already exists for this PO, a green **Shipper created** box appears
 
 A yellow **Review warnings** box lists anything the app is unsure about. Examples are missing pages, handwriting it couldn't read, a missing quantity, or notes from the extraction such as "no unit price shown on this PO". Read these warnings before confirming.
 
-### PO information
+### PO header
 
-The header fields are grouped into **Order**, **Customer**, and **Addresses & notes**. Check each field against the PDF and correct anything that's wrong.
+The header fields sit in a compact form: PO number, customer, dates, buyer, addresses and notes. The ShopKeeper customer shows as **Customer: CODE ✓ Matched** with **Change** if you need a different customer. The header stays on screen and stays editable after you confirm the PO.
 
-### Line items
+### The Lines grid
 
-Each line of the PO is one row in the table: line number, part number, revision, description, quantity, unit, unit price and due date.
+Every PO line is one row. Every cell is editable, including lines that already have a ShopKeeper job. Confirming the PO does not change the layout; it only turns on job creation.
 
-- Click any cell to edit it. Press **Enter** to keep the value and move to the next field.
-- Click the speech-bubble icon on a row to add or view **notes** for that line.
-- Click the trash icon to delete a line that the app added by mistake.
-- Click **Add line** to add a line the app missed. **Save** copies the ShopKeeper customer (and cert default) from the other lines, so you do not match the customer again. You still need **PO is correct**, then **Use** the part on the new line, then **Create job**.
-- Under each line, type a ShopKeeper part number. Matches that **start with** what you typed appear as you type (you can still click **Find part**). Press **Enter** or click a match row to fill **Part #**, **Rev**, and **Description** from ShopKeeper. You can still edit those fields after.
+| Column | What it is |
+|---|---|
+| Chevron | Opens or closes that line's details, directly under the row |
+| Ln, part #, rev, description, qty, unit, price, due | PO data |
+| SK part | Matched ShopKeeper part, or **Not matched** |
+| Cert | Certificate of conformance for the line |
+| Job # | ShopKeeper job number once created |
+| SK status | ShopKeeper ship-line status: **S** shipped, **I** invoiced, blank not shipped |
+| Status | Needs part, Part matched, Possible dup., Ready, Created, Credit hold, Skipped, Failed, Not saved yet |
 
-Each line should match the PO exactly. **One line becomes one ShopKeeper job.**
+Click a cell to type. The highlighted row (accent bar) is the line you are on. Opening details is separate: click the chevron or press **Enter**. Only one line's details are open at a time.
+
+**Add line** adds a line the app missed. **Save** copies the ShopKeeper customer (and cert default) from the other lines. You still need **PO is correct**, then match the part, then **Create job and print**.
 
 **How the app fills in line items**
 
@@ -159,27 +165,44 @@ Each line should match the PO exactly. **One line becomes one ShopKeeper job.**
 |---|---|
 | **Qty** | The quantity exactly as stated on the PO, including lot lines (sometimes 1, sometimes the real piece count). **0 means the PO didn't state a quantity**: check the PO and enter the right number. A job can't be created with 0. |
 | **Unit** | **Each** or **Lot** only. Lot is used when the line is priced as a lot charge. This is the unit ShopKeeper uses to apply the price. |
-| **Unit price** | The price as stated on the PO, shown as US dollars (`$12.50`). Press **Enter** or leave the field to format what you typed. For lot-priced lines this is the lot charge; it is never divided by the quantity. Blank means the PO showed no price: enter it before creating the job. |
+| **Unit price** | The price as stated on the PO, shown as US dollars (`$12.50`). Leave the field to format what you typed. For lot-priced lines this is the lot charge; it is never divided by the quantity. Blank means the PO showed no price: enter it before creating the job. If you pick a past price, it shows in the theme color with "Changed from $X on the PO." |
 | **Due** | Always **today's date** (the day the PO was extracted), whatever date the PO shows. Change it here if a line needs a different date. |
 
 **Expedite fees** become their own line (and their own job) with the part number **EXPEDITE**. If the PO shows the fee amount it's filled in; otherwise enter the amount you've calculated. When matching the part in ShopKeeper, search for the expedite part by name if **EXPEDITE** doesn't find it.
+
+### Line details
+
+Details open under the line, inside the grid. They include the part matcher (or the matched part with **Change**), credit-hold and duplicate checks, line notes, **Price lookup**, and **Create job and print** when the line is ready. If the line already has a job, details show a mini job page: job fields (the same values as the grid row), operations, picture, **Save to ShopKeeper**, **Print**, and **Delete job**.
+
+### Keyboard
+
+| Key | What it does |
+|---|---|
+| **↑ / ↓** | Move to the same column on the previous or next line. Highlights that line; does not open or close details. |
+| **← / →** | Move the cursor in the cell. At the start or end of the value, jump to the previous or next field on the row. |
+| **Enter** | Open or close that line's details. |
+| **Esc** | Close the open details. |
+| **Ctrl+S** (⌘S on Mac) | Save. |
+| **Ctrl+Enter** (⌘Enter on Mac) | PO is correct. |
+
+In the PO header form, **Enter** still moves to the next field.
 
 ### The action bar (pinned to the bottom of the screen)
 
 | Button | What it does |
 |---|---|
-| **Save** | Saves your edits without marking the PO checked. Use it when you need to come back later. |
-| **PO is correct** | Saves your edits and marks the PO as checked. This is required before you can create jobs. |
+| **Re-extract** | Reads the original PDF again. Replaces the current extracted values, including your edits, and sets the PO back to Needs check. |
+| **Delete this PO** | Deletes this purchase order and its original PDF. |
+| **Save** | Saves everything at once. The label shows what is pending, for example **Save (PO)**, **Save (job 116870)**, or **Save (PO + job 116870)**. Saving a created job also updates ShopKeeper. If a shipper already exists, you will be asked to confirm. |
+| **PO is correct** | Marks the PO as checked so you can create jobs. After that it reads **✓ PO is correct**. Clicking it again does nothing. |
 
-**Read PDF again** and **Delete this PO** sit below the form, not on the action bar. Read PDF again replaces all fields, including your edits, and sets the PO back to Needs check.
-
-> Once a PO is checked, changing any field sets it back to **Needs check**, and you'll need to click **PO is correct** again.
+If you edit a line that does **not** have a job, an amber note asks you to click **PO is correct** again after you save. Editing a line that already has a job does not unconfirm the PO; those edits go to the job when you save.
 
 ---
 
 ## 8. Creating ShopKeeper jobs
 
-The **ShopKeeper jobs** section appears on the review page once extraction is finished. Jobs can only be created after you click **PO is correct**. After the PO is checked, that card moves above **PO information** and **Line items**. If several lines are ready, **Create all ready lines** creates them one after another (still one ShopKeeper job per line).
+Jobs can only be created after you click **PO is correct**. The grid looks the same before and after. If several lines are ready, **Create all ready jobs (N)** in the Lines header creates them one after another (still one ShopKeeper job per line). Hovering that button highlights the ready rows.
 
 ### Step 1: Match the customer
 
@@ -199,16 +222,17 @@ Once the customer is picked, the app also checks whether the same PO number was 
 
 ### Step 2: Match the part for each line
 
-Under each line in **Line items**, the ShopKeeper part search is already filled from the extracted part number and revision.
+Open the line (chevron or **Enter**). The ShopKeeper part search is already filled from the extracted part number and revision.
 
 1. Correct the search if ShopKeeper uses a different part number. Matches that **start with** what you typed appear as you type.
 2. Press **Enter** for the first match, or click the correct part row. That fills **Part #**, **Rev**, and **Description** on the line. You can still edit those fields.
+3. If nothing matches, **Create new part** opens the part editor. When you come back, that line reopens and searches again.
 
 When the customer and part are both set, and any warnings have been acknowledged, the line's status changes to **Ready**.
 
 ### Step 3: Create the job
 
-Click **Create job** on a line that shows **Ready**. The ShopKeeper job number then appears in the **Job #** column and the status changes to **Created**.
+Click **Create job and print** in the open line's details when the status is **Ready**. The ShopKeeper job number then appears in the **Job #** column and the status changes to **Created**.
 
 Jobs are created **one line at a time**, so check each line before you click. A job needs a quantity above 0, a unit price, and a due date.
 
@@ -218,19 +242,22 @@ When you pick the customer, each line’s **Cert** box follows that customer’s
 
 | Status | Meaning |
 |---|---|
-| **Match needed** | The customer or part isn't set yet, or the PO isn't checked. |
-| **Ready to create** | Everything is set. You can click **Create job**. |
-| **Creating** | The job is being written to ShopKeeper. |
-| **Job made** | The job exists in ShopKeeper, and the job number is shown. |
+| **Needs part** | No ShopKeeper part is matched yet. |
+| **Part matched** | The part is set; the line is not ready yet. |
+| **Possible dup.** | ShopKeeper already has a job for this customer, PO, and part. |
+| **Ready** | Everything is set. You can click **Create job and print**. |
+| **Created** | The job exists in ShopKeeper, and the job number is shown. |
+| **Credit hold** | The customer is on credit hold; acknowledge it before creating the job. |
 | **Failed** | ShopKeeper rejected the job. The reason is shown in red. Fix the problem and try again. |
 | **Skipped** | You chose to skip this line for now. |
+| **Not saved yet** | A new line that has not been saved. |
 
 ### Checks you may be asked to acknowledge
 
 - **Credit hold:** the customer is on credit hold in ShopKeeper. Click **Acknowledge credit hold** if the job should go ahead anyway.
 - **Duplicate job:** ShopKeeper already has a job for this customer, PO number, and part. Choose one of:
-  - **Create new job anyway**, if this really is a new order;
-  - **Skip line**, if the job already exists.
+  - **Create anyway**, if this really is a new order;
+  - **Skip this line**, if the job already exists.
 
 ---
 
@@ -249,18 +276,26 @@ Sometimes a line can't be entered yet. For example, the part isn't in ShopKeeper
 | Situation | What to do |
 |---|---|
 | A field was read wrong | Edit it on the review page, then **PO is correct** again. |
-| Many fields are wrong, or the wrong PDF was used | **Read PDF again**, or **Delete this PO** and upload it again. |
-| Extraction failed or shows **Stuck** | Open the PO and click **Read PDF again**. |
+| Many fields are wrong, or the wrong PDF was used | **Re-extract**, or **Delete this PO** and upload it again. |
+| Extraction failed or shows **Stuck** | Open the PO and click **Re-extract**. |
 | "The original PDF file is missing from storage" | The PDF file was moved or deleted from the PDF folder. Tell whoever manages the warehouse PC; it can be restored from the DiskStation copy. |
 | A job was created with the wrong details | Open the job and **Save job details** (price, qty, date, notes, cert, part, customer, PO). Job number and shipper number cannot be changed here. If a shipper already exists, confirm the warning; the shipper quantity is updated too. Office only: **Delete ShopKeeper job** removes the job in ShopKeeper (same as ShopKeeper Delete Job) and clears it here so you can create again. It is refused if the job is on a shipper — unlink that in ShopKeeper first. **Clear job from this app** only drops this app’s job number; use it when the job is already gone from ShopKeeper. |
 | A page was missed and you need another line | **Add line**, enter qty/price, **Save**, **PO is correct**, **Use** the part, then **Create job**. The ShopKeeper customer is copied from the other lines. If a shipper already exists, click **Add to shipper** on the work list after the new job is created. |
 | Customer or part isn't found | Open the **Parts** tab to add the part, then search again. Customers still need to be added in ShopKeeper. |
 
-> **Be careful with Read PDF again and Delete.** Read PDF again replaces the line items, and Delete removes the PO and its history. Neither changes jobs already in ShopKeeper, but this app will lose track of which jobs it created for that PO.
+> **Be careful with Re-extract and Delete.** Re-extract replaces the line items, and Delete removes the PO and its history. Neither changes jobs already in ShopKeeper, but this app will lose track of which jobs it created for that PO.
 
 ---
 
-## 11. Quick checklist
+## 11. Settings
+
+The gear next to **+ New PO** opens **Settings**. It is not a tab.
+
+**Color theme** sets the color of the app header, buttons and section headers. Section headers use a softer shade, and text switches between black and white for whichever is easier to read. Pick one of the eight swatches. This browser keeps the choice on this computer.
+
+---
+
+## 12. Quick checklist
 
 **PDF POs**
 
@@ -269,7 +304,7 @@ Sometimes a line can't be entered yet. For example, the part isn't in ShopKeeper
 3. Check the header fields and every line against the PDF. Fix any **0** quantities, blank prices, and the **Each / Lot** unit.
 4. **PO is correct.**
 5. Match the customer (press **Enter** or click the row).
-6. For each line: type the part (matches appear as you type), press **Enter** or click the row, then acknowledge any checks, then **Create job**. Several ready lines can use **Create all ready lines**.
+6. For each line: open details, type the part (matches appear as you type), press **Enter** or click the row, then acknowledge any checks, then **Create job and print**. Several ready lines can use **Create all ready jobs**.
 7. The work list shows **Jobs done**. Click **Create shipper** on that row for one shipper covering every job on the PO. Any skipped line needs follow-up. If you add a line later and create its job, use **Add to shipper** instead of making a second shipper.
 
 **Manual entry**

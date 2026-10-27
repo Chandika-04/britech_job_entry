@@ -41,15 +41,29 @@ interface Props {
   partRevision: string | null;
   quantity?: string;
   disabled?: boolean;
+  currentPrice?: string;
+  pickLabel?: string;
   onPick: (price: string) => void;
   onAfterPick?: () => void;
 }
 
-export function PriceLookup({ customerNumber, partNumber, partRevision, quantity, disabled, onPick, onAfterPick }: Props) {
+export function PriceLookup({
+  customerNumber,
+  partNumber,
+  partRevision,
+  quantity,
+  disabled,
+  currentPrice,
+  pickLabel,
+  onPick,
+  onAfterPick,
+}: Props) {
   const [quotes, setQuotes] = useState<PriceQuote[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
   const ready = Boolean(customerNumber && partNumber && partRevision);
+  const showing = open && quotes !== null;
 
   const search = async () => {
     if (!customerNumber || !partNumber || !partRevision) return;
@@ -58,25 +72,40 @@ export function PriceLookup({ customerNumber, partNumber, partRevision, quantity
     try {
       const result = await api.lookupPrices(customerNumber, partNumber, partRevision, quantity);
       setQuotes(result.quotes);
+      setOpen(true);
       if (result.quotes.length === 0) setError("No contract, matrix, job, or proposal prices found for this customer and part.");
     } catch (err) {
       setQuotes([]);
+      setOpen(true);
       setError(err instanceof Error ? err.message : "Price lookup failed.");
     } finally {
       setBusy(false);
     }
   };
 
+  const toggle = () => {
+    if (showing) {
+      setOpen(false);
+      return;
+    }
+    if (quotes) {
+      setOpen(true);
+      return;
+    }
+    void search();
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" size="sm" disabled={disabled || busy || !ready} onClick={search}>
-          {busy ? "Looking up…" : "Price lookup"}
+        <Button type="button" variant="outline" size="sm" disabled={disabled || busy || !ready} onClick={toggle}>
+          {busy ? "Looking up…" : showing ? "Hide prices" : "Price lookup"}
         </Button>
+        {currentPrice ? <span className="font-mono text-xs tabular-nums">{currentPrice}</span> : null}
         {!ready ? <span className="text-xs text-muted">Match the customer and ShopKeeper part first.</span> : null}
       </div>
-      {error ? <p className="text-xs text-muted">{error}</p> : null}
-      {quotes && quotes.length > 0 ? (
+      {showing && error ? <p className="text-xs text-muted">{error}</p> : null}
+      {showing && quotes && quotes.length > 0 ? (
         <div className="max-h-72 min-w-0 overflow-y-auto rounded-md border border-rule bg-white">
           <table className="data-table wrap">
             <thead>
@@ -86,6 +115,7 @@ export function PriceLookup({ customerNumber, partNumber, partRevision, quantity
                 <th className="num">Qty</th>
                 <th>Job / quote</th>
                 <th>Date</th>
+                {pickLabel ? <th /> : null}
               </tr>
             </thead>
             <tbody>
@@ -93,14 +123,14 @@ export function PriceLookup({ customerNumber, partNumber, partRevision, quantity
                 <tr
                   key={`${quote.source}-${quote.job_number ?? index}-${quote.unit_price}`}
                   className={disabled ? "pick-row is-disabled" : "pick-row"}
-                  tabIndex={disabled ? undefined : 0}
+                  tabIndex={disabled || pickLabel ? undefined : 0}
                   onClick={() => {
-                    if (disabled) return;
+                    if (disabled || pickLabel) return;
                     onPick(formatUsd(quote.unit_price));
                     onAfterPick?.();
                   }}
                   onKeyDown={(event) => {
-                    if (disabled) return;
+                    if (disabled || pickLabel) return;
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
                       onPick(formatUsd(quote.unit_price));
@@ -122,6 +152,21 @@ export function PriceLookup({ customerNumber, partNumber, partRevision, quantity
                     )}
                   </td>
                   <td className="whitespace-nowrap font-mono text-xs text-muted">{formatDate(quote.order_date)}</td>
+                  {pickLabel ? (
+                    <td>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={disabled}
+                        onClick={() => {
+                          onPick(formatUsd(quote.unit_price));
+                          onAfterPick?.();
+                        }}
+                      >
+                        {pickLabel}
+                      </Button>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

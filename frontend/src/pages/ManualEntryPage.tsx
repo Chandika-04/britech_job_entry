@@ -22,7 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { cn, focusNextEmpty, formatUsd, handleEnterAdvance, todayIso } from "@/lib/utils";
+import { cn, focusNextEmpty, formatQty, formatUsd, handleEnterAdvance, todayIso } from "@/lib/utils";
 import type { CustomerCandidate, LineItem, LineItemDraft, PartCandidate, PoDetail, PoDraft } from "@/types/po";
 
 const UNITS = ["Each", "Lot"] as const;
@@ -48,7 +48,7 @@ function toDraft(po: PoDetail): PoDraft {
         customer_part_number: asText(item.customer_part_number),
         revision: asText(item.revision),
         description: asText(item.description),
-        quantity: asText(item.quantity),
+        quantity: formatQty(item.quantity),
         unit_price: formatUsd(item.unit_price),
         uom: item.uom === "Lot" ? "Lot" : "Each",
         due_date: asText(item.due_date) || todayIso(),

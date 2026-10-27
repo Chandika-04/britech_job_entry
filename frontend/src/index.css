@@ -12,9 +12,13 @@
   --color-rule-soft: #e7ebf0;
   --color-head: #f5f7fa;
   --color-accent: #1f54c9;
-  --color-accent-hover: #1a47ab;
-  --color-accent-soft: #e8eefb;
-  --color-card-header: #6b90b3;
+  --color-accent-hover: #1b4ab1;
+  --color-accent-soft: #e4eaf9;
+  --color-card-header: #c9d6f2;
+  --color-accent-ink: #ffffff;
+  --color-card-header-ink: #16202c;
+  --color-accent-text: #1f54c9;
+  --color-accent-grid: rgb(31 84 201 / 0.05);
 }
 
 :root {
@@ -43,8 +47,8 @@ textarea {
   .eng-grid {
     background-color: #fff;
     background-image:
-      linear-gradient(rgb(31 84 201 / 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(31 84 201 / 0.05) 1px, transparent 1px);
+      linear-gradient(var(--color-accent-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--color-accent-grid) 1px, transparent 1px);
     background-size: 22px 22px;
   }
 
@@ -86,7 +90,7 @@ textarea {
   }
 
   .data-table tbody tr.pick-row:hover td {
-    background: rgb(31 84 201 / 0.06);
+    background: var(--color-accent-soft);
   }
 
   .data-table tbody tr.pick-row.is-selected td {
@@ -193,11 +197,92 @@ textarea {
     outline: none;
     border-color: var(--color-accent);
     background: #fff;
-    box-shadow: 0 0 0 2px rgb(31 84 201 / 0.15);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 15%, transparent);
   }
 
   .cell-input:disabled {
     color: var(--color-muted);
+  }
+
+  .sr-only-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .lines-sheet {
+    table-layout: fixed;
+    min-width: 950px;
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    font-size: 13px;
+  }
+
+  .lines-sheet th,
+  .lines-sheet td {
+    border-bottom: 1px solid var(--color-rule-soft);
+    padding: 0 2px;
+    vertical-align: middle;
+  }
+
+  .lines-sheet thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    height: 28px;
+    background: var(--color-card-header);
+    color: var(--color-card-header-ink);
+    border-bottom: 1px solid var(--color-rule);
+    padding: 0 6px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .lines-sheet tbody tr[data-row] {
+    height: 28px;
+  }
+
+  .lines-sheet tbody tr[data-alt="1"] td {
+    background: #f6f7f9;
+  }
+
+  .lines-sheet tbody tr.is-highlight td {
+    background: var(--color-accent-soft);
+  }
+
+  .lines-sheet tbody tr.is-highlight td:first-child {
+    box-shadow: inset 3px 0 0 var(--color-accent);
+  }
+
+  .lines-sheet tbody tr.is-ready-preview td {
+    background: rgb(22 163 74 / 0.14);
+  }
+
+  .lines-sheet tbody tr.is-ready-preview td:first-child {
+    box-shadow: inset 3px 0 0 #16a34a;
+  }
+
+  .lines-sheet .sk-sep {
+    border-left: 3px solid var(--color-rule);
+  }
+
+  .lines-details td {
+    background: #f4f5f7;
+    border-top: 1px solid var(--color-rule);
+    border-bottom: 2px solid var(--color-rule);
+    padding: 10px 12px 12px;
+    vertical-align: top;
   }
 
   .field-label {
@@ -219,22 +304,124 @@ textarea {
 
   .card-header {
     background: var(--color-card-header);
-    color: #fff;
+    color: var(--color-card-header-ink);
   }
 
   .card-header .text-muted {
-    color: rgb(255 255 255 / 0.85);
+    color: color-mix(in srgb, var(--color-card-header-ink) 75%, transparent);
   }
 
-  .card-header button {
-    border-color: rgb(255 255 255 / 0.4);
-    background: rgb(255 255 255 / 0.12);
-    color: #fff;
+  .card-header button:not(.bg-accent):not(.bg-\[\#1d6b3a\]):not(.bg-\[\#b42318\]) {
+    border-color: color-mix(in srgb, var(--color-card-header-ink) 40%, transparent);
+    background: color-mix(in srgb, var(--color-card-header-ink) 12%, transparent);
+    color: var(--color-card-header-ink);
   }
 
-  .card-header button:hover:not(:disabled) {
-    border-color: rgb(255 255 255 / 0.65);
-    background: rgb(255 255 255 / 0.22);
-    color: #fff;
+  .card-header button:not(.bg-accent):hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--color-card-header-ink) 65%, transparent);
+    background: color-mix(in srgb, var(--color-card-header-ink) 22%, transparent);
+    color: var(--color-card-header-ink);
+  }
+
+  .lines-grid {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    background: #fff;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .lines-grid thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    height: 26px;
+    background: var(--color-card-header);
+    color: var(--color-card-header-ink);
+    border-bottom: 1px solid var(--color-rule);
+    padding: 3px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .lines-grid td {
+    border-bottom: 1px solid var(--color-rule-soft);
+    padding: 3px 4px;
+    height: 26px;
+    vertical-align: middle;
+    background: #fff;
+    font-size: 12px;
+    line-height: 1.25;
+    overflow: hidden;
+  }
+
+  .lines-grid .cell-input {
+    height: 20px;
+    padding: 0 3px;
+    font-size: 12px;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .lines-grid select.cell-input {
+    appearance: none;
+    padding-right: 14px;
+  }
+
+  .lines-grid .cell-input:focus {
+    text-overflow: clip;
+  }
+
+  .lines-grid td[data-col="2"] .cell-input,
+  .lines-grid td[data-col="8"] .cell-input {
+    text-overflow: clip;
+  }
+
+  .lines-grid td[data-col="9"] .sk-part {
+    display: block;
+    white-space: nowrap;
+  }
+
+  .lines-grid tbody tr[data-row].is-alt td {
+    background: #f7f8fa;
+  }
+
+  .lines-grid tbody tr[data-row].is-highlighted td {
+    background: var(--color-accent-soft);
+  }
+
+  .lines-grid tbody tr[data-row].is-highlighted td:first-child {
+    box-shadow: inset 3px 0 0 var(--color-accent);
+  }
+
+  .lines-grid tbody tr[data-row].is-ready-preview td {
+    background: rgb(16 185 129 / 0.14);
+  }
+
+  .lines-grid tbody tr[data-row].is-ready-preview td:first-child {
+    box-shadow: inset 3px 0 0 #15803d;
+  }
+
+  .lines-grid tbody tr.details-row td {
+    height: auto;
+    padding: 0;
+    background: #f6f7f8;
+    border-top: 1px solid var(--color-rule);
+    border-bottom: 2px solid var(--color-rule);
+    vertical-align: top;
+  }
+
+  .lines-grid .sk-split {
+    border-left: 3px solid var(--color-rule);
   }
 }

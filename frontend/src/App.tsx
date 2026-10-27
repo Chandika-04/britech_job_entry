@@ -10,6 +10,7 @@ import { PartsPage } from "@/pages/PartsPage";
 import { PoSummaryPage } from "@/pages/PoSummaryPage";
 import { PurchaseOrdersPage } from "@/pages/PurchaseOrdersPage";
 import { ReviewPage } from "@/pages/ReviewPage";
+import { SettingsPage } from "@/pages/SettingsPage";
 import { ShipperPage } from "@/pages/ShipperPage";
 import { ShippersPage } from "@/pages/ShippersPage";
 import { UploadPage } from "@/pages/UploadPage";
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/parts" element={<PartsPage />} />
           <Route path="/parts/new" element={<PartEditorPage />} />
           <Route path="/parts/:pmLinkId" element={<PartEditorPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

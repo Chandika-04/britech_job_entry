@@ -13,6 +13,17 @@
     <title>Britech Job Entry</title>
   </head>
   <body>
+    <script>
+      try {
+        var vars = JSON.parse(localStorage.getItem("britech.theme.vars") || "");
+        if (vars && typeof vars === "object") {
+          var style = document.documentElement.style;
+          for (var name in vars) {
+            if (Object.prototype.hasOwnProperty.call(vars, name)) style.setProperty(name, vars[name]);
+          }
+        }
+      } catch (e) {}
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

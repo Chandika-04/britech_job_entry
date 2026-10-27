@@ -170,19 +170,21 @@ export function LineDetail({
   disabled,
   onRun,
   showFinder = true,
+  hideCreatedActions = false,
 }: {
   po: PoDetail;
   line: LineItem;
   disabled?: boolean;
   onRun: RunLine;
   showFinder?: boolean;
+  hideCreatedActions?: boolean;
 }) {
   const created = line.erp_status === "created";
   const skipped = line.erp_status === "skipped";
 
   return (
     <div className="space-y-2">
-      {line.erp_job_number ? (
+      {line.erp_job_number && !hideCreatedActions ? (
         <p className="text-xs text-emerald-800">
           ShopKeeper job{" "}
           <Link
@@ -221,10 +223,10 @@ export function LineDetail({
           </span>
           <div className="flex shrink-0 gap-2">
             <Button size="sm" disabled={disabled} onClick={() => onRun(line.id, () => api.acknowledgeDuplicate(po.id, line.id), "Duplicate acknowledged.")}>
-              Create new job anyway
+              Create anyway
             </Button>
             <Button size="sm" variant="outline" disabled={disabled} onClick={() => onRun(line.id, () => api.skipLine(po.id, line.id), "Line skipped.")}>
-              Skip line
+              Skip this line
             </Button>
           </div>
         </div>
@@ -260,7 +262,7 @@ export function LineDetail({
             ) : null}
           </div>
         </div>
-      ) : !created ? (
+      ) : !created && !hideCreatedActions ? (
         <div className="flex justify-end">
           {!skipped ? (
             <Button variant="ghost" size="sm" disabled={disabled} onClick={() => onRun(line.id, () => api.skipLine(po.id, line.id), "Line skipped.")}>
@@ -268,7 +270,16 @@ export function LineDetail({
             </Button>
           ) : null}
         </div>
-      ) : (
+      ) : line.erp_status === "failed" && hideCreatedActions ? (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={disabled}
+          onClick={() => onRun(line.id, () => api.resetErp(po.id, line.id), "Line cleared. You can create a new job.")}
+        >
+          Reset
+        </Button>
+      ) : hideCreatedActions ? null : (
         <details className="rounded-md border border-rule px-3 py-2 text-xs text-muted">
           <summary className="cursor-pointer font-semibold">Office only — delete job</summary>
           <p className="mt-2">

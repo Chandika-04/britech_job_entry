@@ -50,6 +50,53 @@ export function parseMoney(value: string | number | null | undefined): string | 
   return amount.toFixed(2);
 }
 
+export function formatQty(value: string | number | null | undefined): string {
+  if (value == null) return "";
+  const text = String(value).trim();
+  if (!text) return "";
+  const amount = Number(text.replace(/,/g, ""));
+  if (!Number.isFinite(amount)) return text;
+  return String(amount);
+}
+
+export function formatDueDisplay(value: string | null | undefined): string {
+  const iso = (value || "").trim();
+  if (!iso) return "";
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!match) return iso;
+  return `${match[2]}/${match[3]}/${match[1].slice(2)}`;
+}
+
+export function parseDueInput(value: string): string | null {
+  const text = value.trim();
+  if (!text) return "";
+  let year: number;
+  let month: number;
+  let day: number;
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text);
+  const usLong = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(text);
+  const usShort = /^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/.exec(text);
+  if (iso) {
+    year = Number(iso[1]);
+    month = Number(iso[2]);
+    day = Number(iso[3]);
+  } else if (usLong) {
+    month = Number(usLong[1]);
+    day = Number(usLong[2]);
+    year = Number(usLong[3]);
+  } else if (usShort) {
+    month = Number(usShort[1]);
+    day = Number(usShort[2]);
+    year = 2000 + Number(usShort[3]);
+  } else {
+    return null;
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 export function formatUsd(value: string | number | null | undefined): string {
   if (value == null) return "";
   const text = String(value).trim();
