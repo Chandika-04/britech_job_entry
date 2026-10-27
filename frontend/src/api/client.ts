@@ -325,9 +325,11 @@ export const api = {
     return request<PartEditor>(`/api/parts/${pmLinkId}/certs/${encodeURIComponent(ctxtId)}`, { method: "DELETE" });
   },
   async uploadPartPicture(pmLinkId: number | string, file: File) {
-    const body = new FormData();
-    body.append("file", file);
-    return request<PartPicture>(`/api/parts/${pmLinkId}/pictures`, { method: "POST", body });
+    return request<PartPicture>(`/api/parts/${pmLinkId}/pictures`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: file.name }),
+    });
   },
   unlinkPartPicture(pmLinkId: number | string, pmpId: number) {
     return request<PartEditor>(`/api/parts/${pmLinkId}/pictures/${pmpId}`, { method: "DELETE" });

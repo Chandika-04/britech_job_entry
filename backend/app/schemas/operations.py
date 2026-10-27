@@ -179,6 +179,10 @@ class LinkCertIn(BaseModel):
     ctxt_id: str
 
 
+class LinkPictureIn(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+
+
 class PrintJobOut(BaseModel):
     job_number: str
     printed: bool

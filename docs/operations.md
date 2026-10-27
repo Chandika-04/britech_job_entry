@@ -122,7 +122,7 @@ Dominant roots on `SkData_Test`:
 
 Most rows have `Pmp_PrintOnTrav = 1`. `PictureRawData` is only three tiny placeholders (`blank.png`, `file-not-found.png`, `no-image.png`) — not the part photo store.
 
-**Link a picture:** pick a file, **copy it onto the PartPhotos share** (configurable, default `\\DISKSTATION\PartPhotos`), then INSERT `PartMasterPics` with `Pmp_PictureName` = that UNC path and `Pmp_PrintOnTrav = 1`. Match ShopKeeper, not the git `docs/` tree.
+**Link a picture:** pick a file that is **already** on the PartPhotos share (configurable, default `\\DISKSTATION\PartPhotos`). Do **not** copy or rename it. INSERT `PartMasterPics` with `Pmp_PictureName` = that existing UNC path and `Pmp_PrintOnTrav = 1`. Match ShopKeeper, not the git `docs/` tree.
 
 Do not store image blobs in SQLite / `BritechJobEntry`.
 
@@ -191,7 +191,7 @@ Header: part # and rev **read-only**. If `Pm_Locked`, show and refuse writes.
 
 ### Picture
 
-Show current `PartMasterPics` (file from the UNC path). **Link picture:** pick a file, copy onto the configured PartPhotos share, INSERT `PartMasterPics` (`Pmp_PrintOnTrav` default on). Unlink: delete the pics row (do not require deleting the file in v1). Traveler uses `Pmp_PrintOnTrav = 1`.
+Show current `PartMasterPics` (file from the UNC path). **Link picture:** pick a file already on the configured PartPhotos share and INSERT `PartMasterPics` with that path (`Pmp_PrintOnTrav` default on). Do not copy the file. Unlink: delete the pics row (do not require deleting the file in v1). Traveler uses `Pmp_PrintOnTrav = 1`.
 
 ### Operations (part standard routing)
 
@@ -254,7 +254,7 @@ Never write `OpMasterMasters` / `OpMasterMasterOps`. INSERT `PartMaster` only fr
 - Cert required, no `CertificationItems`, ops present: job created, **no print**, UI goes to part editor.
 - Both missing: job created, no print, both reasons, job page first.
 - Job page: GET job; PUT header (price/qty/cert/part/customer/PO/date/notes); PUT ops; template replace from fake `OpMasterMasters`; empty template no-op; office **Delete ShopKeeper job** (`DELETE /api/jobs/{job}`) and **Clear job from this app** (`reset-erp`).
-- Part editor: list/search Parts tab; create Production `PartMaster`; edit header (number/rev/customer/description); toggle `Pm_QualityHold`; edit `OpMaster`; link picture (fake filesystem + UNC); link/unlink `CertificationItems`. Existing job `OpStatus` unchanged when `OpMaster` changes. Duplicate part+rev is 409.
+- Part editor: list/search Parts tab; create Production `PartMaster`; edit header (number/rev/customer/description); toggle `Pm_QualityHold`; edit `OpMaster`; link an existing PartPhotos file (no copy); link/unlink `CertificationItems`. Existing job `OpStatus` unchanged when `OpMaster` changes. Duplicate part+rev is 409.
 - Print with ops (and cert when required): fake printer; `Jr_TravelerPrinted` + LockInfo. Zero ops or missing cert: no print.
 - Delete ShopKeeper job: after create, job and ops are gone, line is `ready`, LockInfo `Delete Job`. Refuse if on a shipper or traveler printed. `reset_erp` still does not write ShopKeeper.
 
@@ -280,5 +280,5 @@ Never write `OpMasterMasters` / `OpMasterMasterOps`. INSERT `PartMaster` only fr
 1. Step 7 on create; single **Create job and print** that does not print when job ops = 0 or cert is missing; API returns those reasons.
 2. Job page: `OpStatus` edit, links, popup redirect.
 3. Copy-replace from `OpMasterMasters` / `OpMasterMasterOps`.
-4. Part editor: quality hold, `OpMaster`, PartPhotos copy + `PartMasterPics`, `CertificationItems` link.
+4. Part editor: quality hold, `OpMaster`, PartPhotos link + `PartMasterPics`, `CertificationItems` link.
 5. Traveler + cert PDFs from shop examples; saved printer; steps 10–11. **Done** for traveler (SK066) and COC (SK064). Shipper print still waits on packing-slip work.

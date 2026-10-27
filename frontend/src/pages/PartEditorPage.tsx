@@ -289,6 +289,9 @@ export function PartEditorPage() {
               </div>
             ))}
             {!sectionLocked && part && (part.pictures.length === 0) ? <p className="text-xs text-muted">No pictures linked.</p> : null}
+            <p className="text-xs text-muted">
+              Choose a file already on the PartPhotos share. This links that file; it does not copy it.
+            </p>
             <input
               type="file"
               accept="image/*"
@@ -300,7 +303,7 @@ export function PartEditorPage() {
                 run(async () => {
                   await api.uploadPartPicture(part.pm_linkid, file);
                   await load();
-                }, "Picture copied to PartPhotos and linked.");
+                }, "Picture linked.");
               }}
             />
           </CardContent>

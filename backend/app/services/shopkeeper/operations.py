@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import re
-import shutil
-from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -344,25 +341,15 @@ def unlink_cert(pm_linkid: int, ctxt_id: str, provider: ShopKeeperProvider | Non
 
 def add_picture(
     pm_linkid: int,
-    source: Path,
-    original_name: str,
+    filename: str,
     provider: ShopKeeperProvider | None = None,
 ) -> PartPictureOut:
     provider = provider or get_shopkeeper_provider()
     part = provider.get_part_editor(pm_linkid)
     if part is None:
         raise NotFoundError("Part not found.")
-    dest_dir = _photos_dir()
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    safe = _safe_filename(original_name or source.name)
-    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    dest_name = f"{_safe_filename(part.part_number)}_{_safe_filename(part.part_revision)}_{stamp}_{safe}"
-    dest = dest_dir / dest_name
-    try:
-        shutil.copy2(source, dest)
-    except OSError as exc:
-        raise AppError(f"Could not copy the picture onto the PartPhotos share: {exc}", status_code=502) from exc
-    pic = provider.add_part_picture(pm_linkid, str(dest), Path(original_name).stem)
+    dest = _existing_photo(filename)
+    pic = provider.add_part_picture(pm_linkid, str(dest), dest.stem)
     return PartPictureOut.model_validate(pic, from_attributes=True)
 
 
@@ -429,6 +416,30 @@ def _photos_dir() -> Path:
     raise AppError("Part photos folder is not configured.", status_code=409)
 
 
-def _safe_filename(name: str) -> str:
-    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._")
-    return cleaned or "picture"
+def _photo_basename(filename: str) -> str:
+    name = Path(str(filename).replace("\\", "/")).name
+    if not name or name in {".", ".."}:
+        raise AppError("Choose a picture file on the PartPhotos share.")
+    return name
+
+
+def _existing_photo(filename: str) -> Path:
+    dest_dir = _photos_dir()
+    if not dest_dir.is_dir():
+        raise AppError("The PartPhotos share is not available.", status_code=409)
+    name = _photo_basename(filename)
+    direct = dest_dir / name
+    if direct.is_file():
+        return direct
+    matches = [path for path in dest_dir.rglob(name) if path.is_file() and path.name == name]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise AppError(
+            f"More than one {name} is on the PartPhotos share. Keep one file with that name, then link it.",
+            status_code=409,
+        )
+    raise AppError(
+        f"{name} is not on the PartPhotos share. Put the file in PartPhotos first, then link that file.",
+        status_code=409,
+    )

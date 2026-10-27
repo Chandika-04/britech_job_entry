@@ -1,7 +1,6 @@
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
@@ -13,6 +12,7 @@ from app.schemas.operations import (
     JobHeaderIn,
     JobPageOut,
     LinkCertIn,
+    LinkPictureIn,
     OperationOut,
     OperationsSaveIn,
     OpTemplateOut,
@@ -194,15 +194,8 @@ def part_unlink_cert(pm_linkid: int, ctxt_id: str) -> PartEditorOut:
 
 
 @router.post("/parts/{pm_linkid}/pictures", response_model=PartPictureOut)
-def part_add_picture(pm_linkid: int, file: UploadFile = File(...)) -> PartPictureOut:
-    suffix = Path(file.filename or "pic").suffix or ".bin"
-    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(file.file.read())
-        tmp_path = Path(tmp.name)
-    try:
-        return add_picture(pm_linkid, tmp_path, file.filename or tmp_path.name)
-    finally:
-        tmp_path.unlink(missing_ok=True)
+def part_add_picture(pm_linkid: int, payload: LinkPictureIn) -> PartPictureOut:
+    return add_picture(pm_linkid, payload.filename)
 
 
 @router.delete("/parts/{pm_linkid}/pictures/{pmp_id}", response_model=PartEditorOut)

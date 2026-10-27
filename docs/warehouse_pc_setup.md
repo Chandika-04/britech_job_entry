@@ -121,7 +121,7 @@ Notes:
 - In `SHOPKEEPER_CONNECTION_STRING`, the driver must be one installed on this PC:
   `DRIVER={ODBC Driver 17 for SQL Server}`.
 - `WAREHOUSE_PRINTER_NAME` is unused. Traveler and certification print use the browser print dialog so you can choose a printer.
-- `PART_PHOTOS_DIR` is the PartPhotos share used when linking a picture on the part editor.
+- `PART_PHOTOS_DIR` is the PartPhotos share. Linking a picture on the part editor uses a file already in that folder; it does not copy or rename it.
 - This file holds secrets. It is ignored by git; never commit or share it.
 
 ## 8. First start (by hand)

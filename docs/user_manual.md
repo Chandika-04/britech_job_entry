@@ -113,7 +113,7 @@ This tab is the ShopKeeper **part master**. Search existing parts, open one to e
 1. Open **Parts**. The newest parts appear first.
 2. Choose what to search by: **Part number** (default), **Customer**, or **Description**.
 3. Type the value and press **Enter** (or click **Search**).
-4. Click a **Part #** to open the part editor. Edit part number, rev (blank saves as `-`), customer code, and description, then **Save part details**. Below that: **operations** (copied onto new jobs), **traveler picture**, **certification** link, and **quality hold**. Price matrix is shown as a placeholder until pricing is standardized.
+4. Click a **Part #** to open the part editor. Edit part number, rev (blank saves as `-`), customer code, and description, then **Save part details**. Below that: **operations** (copied onto new jobs), **traveler picture** (link a file already on the PartPhotos share; the app does not copy it), **certification** link, and **quality hold**. Price matrix is shown as a placeholder until pricing is standardized.
 5. Click **New part** to create a part. Part number and customer code are required. Rev defaults to `-`. Description defaults to the part number if you leave it blank. After create, the editor opens so you can add operations, a picture, and a cert.
 6. Use **Previous** / **Next** to move 300 parts at a time.
 

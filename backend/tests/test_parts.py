@@ -115,6 +115,34 @@ def test_copy_part_template_replaces_routing(client):
     assert [row["id"] for row in editor.json()["templates"]] == [1, 2]
 
 
+def test_link_picture_uses_existing_partphotos_file(client, tmp_path, monkeypatch):
+    from app.config import get_settings
+
+    photos = tmp_path / "part-photos"
+    photos.mkdir()
+    chosen = photos / "housing.jpg"
+    chosen.write_bytes(b"jpeg-bytes")
+    nested = photos / "sub" / "deep.png"
+    nested.parent.mkdir()
+    nested.write_bytes(b"png-bytes")
+    monkeypatch.setenv("PART_PHOTOS_DIR", str(photos))
+    get_settings.cache_clear()
+    FakeShopKeeper.reset_shared()
+
+    linked = client.post("/api/parts/101/pictures", json={"filename": "housing.jpg"})
+    assert linked.status_code == 200
+    assert linked.json()["path"] == str(chosen)
+    assert sorted(path.name for path in photos.iterdir()) == ["housing.jpg", "sub"]
+
+    nested_linked = client.post("/api/parts/101/pictures", json={"filename": "deep.png"})
+    assert nested_linked.status_code == 200
+    assert nested_linked.json()["path"] == str(nested)
+
+    missing = client.post("/api/parts/101/pictures", json={"filename": "missing.jpg"})
+    assert missing.status_code == 409
+    assert "not on the PartPhotos share" in missing.json()["detail"]
+
+
 def test_copy_part_template_rejects_locked_and_unknown(client):
     fake = FakeShopKeeper.reset_shared()
     fake.locked_parts.add(101)
