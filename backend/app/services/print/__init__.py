@@ -1,2 +1,2 @@
 from app.services.print.documents import build_certification_pdf, build_job_print_pdf, build_traveler_pdf
-from app.services.print.printer import get_printer
+from app.services.print.printer import direct_print_status, get_printer, print_document

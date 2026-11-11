@@ -730,6 +730,7 @@ def test_shopkeeper_shippers_lists_and_search(client):
     assert body["items"][0]["shipper_number"] == "S000012"
     assert body["items"][0]["job_count"] == 1
     assert body["items"][0]["po_numbers"] == "PO-8802"
+    assert body["items"][0]["customer_code"] == "CORTEC"
     assert body["items"][0]["status"] == "S"
 
     by_job = client.get("/api/shopkeeper/shippers", params={"q": "199201", "search_by": "job"})
@@ -768,26 +769,9 @@ def test_shopkeeper_purchase_orders_empty_search(client):
     assert body["total"] == 0
 
 
-def test_shopkeeper_po_groups_and_detail(client):
+def test_shopkeeper_po_detail(client):
     FakeShopKeeper.reset_shared()
-    grouped = client.get("/api/shopkeeper/purchase-order-groups")
-    assert grouped.status_code == 200
-    body = grouped.json()
-    assert body["total"] == 3
-    assert [item["po_number"] for item in body["items"]] == ["PO-8802", "PO-4501", "MDC-12"]
-    bay = next(item for item in body["items"] if item["po_number"] == "PO-4501")
-    assert bay["customer_code"] == "BAYADV"
-    assert bay["job_count"] == 2
-    assert bay["shipper_numbers"] is None
-
-    by_job = client.get(
-        "/api/shopkeeper/purchase-order-groups",
-        params={"q": "199102", "search_by": "job"},
-    )
-    items = by_job.json()["items"]
-    assert len(items) == 1
-    assert items[0]["po_number"] == "PO-4501"
-    assert items[0]["job_count"] == 2
+    assert client.get("/api/shopkeeper/purchase-order-groups").status_code == 404
 
     detail = client.get(
         "/api/shopkeeper/purchase-orders/detail",
@@ -798,9 +782,96 @@ def test_shopkeeper_po_groups_and_detail(client):
     assert page["customer_code"] == "BAYADV"
     assert page["job_count"] == 2
     assert [job["job_number"] for job in page["jobs"]] == ["199102", "199101"]
+    # Price and unit come back so Copy PO summary can fill Unit price and Ext.
+    assert [(job["unit_price"], job["unit"]) for job in page["jobs"]] == [("150.00", "Lot"), ("9.25", "Each")]
 
     missing = client.get(
         "/api/shopkeeper/purchase-orders/detail",
         params={"customer_code": "BAYADV", "po": "no-such"},
     )
     assert missing.status_code == 404
+
+
+def test_shopkeeper_purchase_orders_field_filters_and(client):
+    FakeShopKeeper.reset_shared()
+    both = client.get("/api/shopkeeper/purchase-orders", params={"po": "PO-4501", "part": "4022"})
+    assert [item["job_number"] for item in both.json()["items"]] == ["199102"]
+
+    short = client.get("/api/shopkeeper/purchase-orders", params={"po": "P"})
+    assert short.json()["total"] == 4
+
+    by_job = client.get("/api/shopkeeper/purchase-orders", params={"job": "1991"})
+    assert [item["job_number"] for item in by_job.json()["items"]] == ["199102", "199101"]
+
+
+def test_shopkeeper_shippers_field_filters_and(client):
+    FakeShopKeeper.reset_shared()
+    both = client.get("/api/shopkeeper/shippers", params={"po": "PO-8802", "customer": "Cortec"})
+    assert [item["shipper_number"] for item in both.json()["items"]] == ["S000012"]
+
+    missing = client.get("/api/shopkeeper/shippers", params={"po": "PO-8802", "customer": "Bay"})
+    assert missing.json()["items"] == []
+
+    short = client.get("/api/shopkeeper/shippers", params={"po": "P"})
+    assert short.json()["total"] == 1
+
+
+def test_shopkeeper_shipper_detail_includes_customer_code(client):
+    FakeShopKeeper.reset_shared()
+    body = client.get("/api/shopkeeper/shippers/S000012").json()
+    assert body["customer_code"] == "CORTEC"
+
+
+def _pdf_pages(content: bytes) -> list[str]:
+    import fitz
+
+    doc = fitz.open(stream=content, filetype="pdf")
+    try:
+        # Embedded Arial extracts spaces as NBSP and hyphens as soft hyphens.
+        return [page.get_text().replace("\xa0", " ").replace("\xad", "-") for page in doc]
+    finally:
+        doc.close()
+
+
+def test_shipper_print_builds_sk055_packing_list(client):
+    FakeShopKeeper.reset_shared()
+    response = client.get("/api/shopkeeper/shippers/S000012/print", params={"copies": ["Office Copy"]})
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    pages = _pdf_pages(response.content)
+    assert len(pages) == 1
+    text = pages[0]
+    for expected in ("Packing List", "S000012", "PO-8802", "MULTI-REV", "199201 Rel 1", "Office Copy", "SK055 Rev B"):
+        assert expected in text
+
+
+def test_shipper_print_defaults_to_customer_and_shipping_copies_and_marks_printed(client):
+    FakeShopKeeper.reset_shared()
+    labels = ("Customer Copy", "Shipping Dept Copy", "Office Copy")
+    default = _pdf_pages(client.get("/api/shopkeeper/shippers/S000012/print").content)
+    assert [label for page in default for label in labels if label in page] == ["Customer Copy", "Shipping Dept Copy"]
+    every = _pdf_pages(
+        client.get("/api/shopkeeper/shippers/S000012/print", params={"copies": list(labels)}).content
+    )
+    assert [label for page in every for label in labels if label in page] == list(labels)
+    assert client.get("/api/shopkeeper/shippers/S000012").json()["printed"] is False
+    assert client.post("/api/shopkeeper/shippers/S000012/print/mark").status_code == 204
+    assert client.get("/api/shopkeeper/shippers/S000012").json()["printed"] is True
+
+
+def test_shipper_print_uses_prepared_by_initials(client):
+    FakeShopKeeper.reset_shared()
+    url = "/api/shopkeeper/shippers/S000012/print"
+    mine = _pdf_pages(client.get(url, params={"copies": ["Office Copy"], "prepared_by": "cr"}).content)[0]
+    assert "Prepared By:  CR" in mine
+    assert "Jane Sales" not in mine
+    # Without initials (an API caller), fall back to the shipper's Jsm_ShipBy.
+    fallback = _pdf_pages(client.get(url, params={"copies": ["Office Copy"]}).content)[0]
+    assert "Prepared By:  Jane Sales" in fallback
+    assert client.get(url, params={"prepared_by": "C R!"}).status_code >= 400
+
+
+def test_shipper_print_unknown_shipper_is_404(client):
+    FakeShopKeeper.reset_shared()
+    assert client.get("/api/shopkeeper/shippers/NOPE/print").status_code == 404
+    assert client.post("/api/shopkeeper/shippers/NOPE/print/mark").status_code == 404

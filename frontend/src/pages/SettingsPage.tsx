@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { applyTheme, readStoredThemeHex, THEME_PRESETS } from "@/lib/theme";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 
 export function SettingsPage() {
+  useDocumentTitle(["Settings"]);
   const [selected, setSelected] = useState(() => readStoredThemeHex().toLowerCase());
   const selectedIndex = Math.max(
     0,

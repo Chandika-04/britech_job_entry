@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import { DirectPrintNote } from "@/components/po/DirectPrintNote";
 import { cn } from "@/lib/utils";
 import { printPdfBlob } from "@/lib/printPdf";
+import { usePrintStatus } from "@/lib/printStatus";
 
 export function PrintJobDialog({
   jobNumber,
@@ -38,7 +40,9 @@ export function PrintJobDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [busy, onClose]);
 
-  const canGo = traveler || (certAvailable && certification);
+  const printStatus = usePrintStatus();
+  const direct = printStatus?.enabled ? printStatus : null;
+  const canGo = (traveler || (certAvailable && certification)) && printStatus !== undefined;
   const showingPreview = Boolean(previewUrls.traveler || previewUrls.cert);
 
   const run = async () => {
@@ -46,6 +50,12 @@ export function PrintJobDialog({
     setBusy(true);
     setError(null);
     try {
+      if (mode === "print" && direct) {
+        // Server sends each document straight to the shop printer with its own sides setting.
+        await api.printJobDirect(jobNumber, { traveler, certification: certAvailable && certification });
+        onClose();
+        return;
+      }
       if (previewUrls.traveler) URL.revokeObjectURL(previewUrls.traveler);
       if (previewUrls.cert) URL.revokeObjectURL(previewUrls.cert);
       const next: { traveler?: string; cert?: string } = {};
@@ -113,6 +123,7 @@ export function PrintJobDialog({
               Print
             </label>
           </div>
+          {mode === "print" ? <DirectPrintNote status={printStatus} kinds={["traveler", "certification"]} /> : null}
           {error ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p> : null}
           {showingPreview ? (
             <div className="space-y-3">

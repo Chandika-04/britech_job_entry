@@ -126,6 +126,8 @@ class ShopKeeperJobOut(BaseModel):
     order_date: date | None = None
     cert_required: bool
     shipper_number: str | None = None
+    unit_price: Decimal | None = None
+    unit: str | None = None
 
 
 class ShopKeeperPoListResponse(BaseModel):
@@ -146,15 +148,6 @@ class ShopKeeperPoGroupOut(BaseModel):
     order_date: date | None = None
 
 
-class ShopKeeperPoGroupListResponse(BaseModel):
-    items: list[ShopKeeperPoGroupOut]
-    total: int
-    page: int
-    page_size: int
-    query: str | None = None
-    search_by: str = "po"
-
-
 class ShopKeeperPoPageOut(ShopKeeperPoGroupOut):
     jobs: list[ShopKeeperJobOut] = Field(default_factory=list)
 
@@ -170,6 +163,7 @@ class ShopKeeperShipperOut(BaseModel):
     job_count: int = 0
     customer_name: str | None = None
     po_numbers: str | None = None
+    customer_code: str | None = None
 
 
 class ShopKeeperShipperListResponse(BaseModel):

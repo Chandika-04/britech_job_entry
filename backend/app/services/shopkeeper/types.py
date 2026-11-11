@@ -145,6 +145,10 @@ class ShopKeeperJobRow:
     order_date: date | None
     cert_required: bool
     shipper_number: str | None
+    unit_price: Decimal | None = None
+    unit: str | None = None
+    # JobShip.Sh_Qty_Shipped; only filled when the row is loaded for a shipper.
+    quantity_shipped: int | None = None
 
 
 @dataclass
@@ -180,6 +184,7 @@ class ShopKeeperShipperRow:
     job_count: int
     customer_name: str | None
     po_numbers: str | None
+    customer_code: str | None = None
 
 
 @dataclass
@@ -197,6 +202,18 @@ class ShopKeeperShipperPage:
     tracking_number: str | None
     note: str | None
     jobs: list[ShopKeeperJobRow]
+    customer_code: str | None = None
+
+
+@dataclass
+class ShipperPrintData:
+    """Everything the SK055 packing list needs: the shipper, its jobs, and the customer it goes to."""
+
+    shipper: ShopKeeperShipperPage
+    customer: CustomerRecord | None = None
+    ship_to: CustomerRecord | None = None
+    # Initials of the person printing (the browser's Prepared by). Falls back to Jsm_ShipBy when absent.
+    prepared_by: str | None = None
 
 
 @dataclass

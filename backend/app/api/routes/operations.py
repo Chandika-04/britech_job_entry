@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -24,6 +25,7 @@ from app.schemas.operations import (
     WorkCenterOut,
 )
 from app.services.po_service import get_po
+from app.services.print.printer import direct_print_status
 from app.services.shopkeeper.operations import (
     add_picture,
     certification_pdf,
@@ -37,8 +39,12 @@ from app.services.shopkeeper.operations import (
     create_part,
     list_parts,
     link_cert,
+    mark_shipper_printed,
     mark_traveler_printed,
     picture_path,
+    print_job,
+    print_shipper,
+    shipper_pdf,
     traveler_pdf,
     save_job_header,
     save_job_operations,
@@ -140,14 +146,77 @@ def job_mark_traveler(job_number: str, db: Session = Depends(get_db)) -> None:
     db.commit()
 
 
+class DirectJobPrintIn(BaseModel):
+    traveler: bool = True
+    certification: bool = False
+
+
+class DirectShipperPrintIn(BaseModel):
+    copies: list[str] | None = None
+    prepared_by: str | None = None
+
+
+class DirectPrintOut(BaseModel):
+    sent: list[str]
+
+
+@router.get("/print/status")
+def print_status() -> dict:
+    """Whether the server prints straight to the shop printer, and with which settings per document."""
+    return direct_print_status()
+
+
+@router.post("/jobs/{job_number}/print/direct", response_model=DirectPrintOut)
+def job_print_direct(job_number: str, payload: DirectJobPrintIn, db: Session = Depends(get_db)) -> DirectPrintOut:
+    try:
+        sent = print_job(db, job_number, traveler=payload.traveler, certification=payload.certification)
+    finally:
+        db.commit()
+    return DirectPrintOut(sent=sent)
+
+
+@router.post("/shopkeeper/shippers/{ship_number}/print/direct", response_model=DirectPrintOut)
+def shipper_print_direct(ship_number: str, payload: DirectShipperPrintIn) -> DirectPrintOut:
+    return DirectPrintOut(sent=print_shipper(ship_number, payload.copies, payload.prepared_by))
+
+
+@router.get("/shopkeeper/shippers/{ship_number}/print")
+def shipper_print_pdf(
+    ship_number: str,
+    copies: list[str] | None = Query(None),
+    prepared_by: str | None = Query(None),
+) -> Response:
+    """SK055 packing list. `copies` picks the footer labels; `prepared_by` is the printer's initials."""
+    return _pdf_response(
+        shipper_pdf(ship_number, copies, prepared_by=prepared_by),
+        f"shipper-{ship_number}.pdf",
+    )
+
+
+@router.post("/shopkeeper/shippers/{ship_number}/print/mark", status_code=204)
+def shipper_mark_printed(ship_number: str) -> None:
+    mark_shipper_printed(ship_number)
+
+
 @router.get("/parts", response_model=PartListResponse)
 def parts_list(
     q: str | None = Query(None),
     search_by: str = Query("part"),
+    part: str | None = Query(None),
+    customer: str | None = Query(None),
+    description: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(300, ge=1, le=300),
 ) -> PartListResponse:
-    return list_parts(query=q, search_by=search_by, page=page, page_size=page_size)
+    return list_parts(
+        query=q,
+        search_by=search_by,
+        page=page,
+        page_size=page_size,
+        part=part,
+        customer=customer,
+        description=description,
+    )
 
 
 @router.post("/parts", response_model=PartEditorOut, status_code=201)

@@ -8,6 +8,7 @@ from app.models.po_request import ReviewState
 from app.schemas.operations import JobHeaderIn, OperationIn, OperationsSaveIn
 from app.schemas.po import LineItemIn, PoUpdate
 from app.services.po_service import save_draft
+from app.services.print.printer import FakePrinter, describe_settings
 from app.services.shopkeeper.writer import resolve_part
 from app.services.shopkeeper.ops_util import note_plain_text, note_to_shopkeeper_html
 from app.services.shopkeeper.fake import FakeShopKeeper
@@ -174,8 +175,11 @@ def test_job_page_template_replace(db, settings):
         fake,
     )
     assert len(saved) == 1
-    pdf = print_job(db, line.erp_job_number, fake)
-    assert pdf.startswith(b"%PDF")
+    sent = print_job(db, line.erp_job_number, fake)
+    assert sent == ["Traveler sent to fake (front and back)."]
+    printed = FakePrinter.shared().printed
+    assert [(doc.kind, doc.settings) for doc in printed] == [("traveler", "duplexlong")]
+    assert printed[0].pdf.startswith(b"%PDF")
     assert line.erp_job_number in fake.traveler_printed
 
 
@@ -578,3 +582,64 @@ def test_resolve_part_refuses_creating_line(db, settings):
     line.erp_status = "creating"
     with pytest.raises(ConflictError, match="in progress"):
         resolve_part(db, po, line, "4022.656.2799", "A", fake)
+
+
+def test_direct_print_traveler_front_and_back_cert_one_side(client, db, settings):
+    fake = FakeShopKeeper.reset_shared()
+    po, line = _ready_line(db, settings, customer="BAYADV", fake=fake)
+    line, _ = create_job_and_print(db, po, line, fake)
+    db.commit()
+    job = line.erp_job_number
+
+    status = client.get("/api/print/status").json()
+    assert status["enabled"] is True
+    assert status["documents"]["traveler"]["description"] == "front and back"
+    assert status["documents"]["certification"]["description"] == "one side"
+
+    response = client.post(f"/api/jobs/{job}/print/direct", json={"traveler": True, "certification": True})
+    assert response.status_code == 200, response.text
+    assert response.json()["sent"] == [
+        "Traveler sent to fake (front and back).",
+        "Certification sent to fake (one side).",
+    ]
+    printed = FakePrinter.shared().printed
+    assert [(doc.kind, doc.printer, doc.settings) for doc in printed] == [
+        ("traveler", "fake", "duplexlong"),
+        ("certification", "fake", "simplex"),
+    ]
+    assert job in fake.traveler_printed
+
+
+def test_direct_print_uses_per_document_printer_queue(client, settings, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setenv("SHIPPER_PRINTER_NAME", "Shop Printer - Single")
+    get_settings.cache_clear()
+    FakeShopKeeper.reset_shared()
+    response = client.post(
+        "/api/shopkeeper/shippers/S000012/print/direct",
+        json={"copies": ["Office Copy"], "prepared_by": "cr"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["sent"] == ["Shipper sent to Shop Printer - Single (one side)."]
+    assert [(doc.kind, doc.printer, doc.settings) for doc in FakePrinter.shared().printed] == [
+        ("shipper", "Shop Printer - Single", "simplex")
+    ]
+    assert client.get("/api/shopkeeper/shippers/S000012").json()["printed"] is True
+
+
+def test_direct_print_off_without_printer_name(client, settings, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setenv("WAREHOUSE_PRINTER_NAME", "")
+    get_settings.cache_clear()
+    status = client.get("/api/print/status").json()
+    assert status["enabled"] is False
+    assert "WAREHOUSE_PRINTER_NAME" in status["reason"]
+    assert client.post("/api/shopkeeper/shippers/S000012/print/direct", json={}).status_code == 409
+
+
+def test_describe_print_settings():
+    assert describe_settings("duplexlong") == "front and back"
+    assert describe_settings("simplex,2x") == "one side, 2 copies"
+    assert describe_settings("") == "printer default sides"

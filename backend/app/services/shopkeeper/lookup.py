@@ -44,6 +44,17 @@ def normalize_search_by(value: str | None) -> str:
     return key if key in SEARCH_FIELDS else "po"
 
 
+def ready_term(value: str | None, min_len: int = 1) -> str | None:
+    q = (value or "").strip()
+    if len(q) < min_len:
+        return None
+    return q
+
+
+def field_min_len(field: str) -> int:
+    return 2 if field in ("po", "job") else 1
+
+
 def job_matches_field(job: ShopKeeperJobRow, query: str, search_by: str) -> bool:
     q = query.casefold()
     if search_by == "po":
@@ -54,6 +65,35 @@ def job_matches_field(job: ShopKeeperJobRow, query: str, search_by: str) -> bool
         return q in (job.job_number or "").casefold()
     haystack = f"{job.customer_code} {job.customer_name or ''}"
     return q in haystack.casefold()
+
+
+def job_matches_filters(
+    job: ShopKeeperJobRow,
+    *,
+    query: str | None = None,
+    search_by: str | None = None,
+    po: str | None = None,
+    job_number: str | None = None,
+    part: str | None = None,
+    customer: str | None = None,
+) -> bool:
+    q = (query or "").strip()
+    field = normalize_search_by(search_by)
+    if q and len(q) >= field_min_len(field) and not job_matches_field(job, q, field):
+        return False
+    if term := ready_term(po, 2):
+        if not job_matches_field(job, term, "po"):
+            return False
+    if term := ready_term(job_number, 2):
+        if not job_matches_field(job, term, "job"):
+            return False
+    if term := ready_term(part):
+        if not job_matches_field(job, term, "part"):
+            return False
+    if term := ready_term(customer):
+        if not job_matches_field(job, term, "customer"):
+            return False
+    return True
 
 
 def _job_recency_key(job: ShopKeeperJobRow) -> tuple[int, str]:
@@ -76,8 +116,38 @@ def shipper_matches_field(row: ShopKeeperShipperRow, query: str, search_by: str,
         return q in (row.po_numbers or "").casefold() or q in job_haystack
     if search_by == "job":
         return q in job_haystack
-    haystack = f"{row.customer_name or ''} {job_haystack}"
+    haystack = f"{row.customer_name or ''} {row.customer_code or ''} {job_haystack}"
     return q in haystack.casefold()
+
+
+def shipper_matches_filters(
+    row: ShopKeeperShipperRow,
+    job_haystack: str = "",
+    *,
+    query: str | None = None,
+    search_by: str | None = None,
+    shipper: str | None = None,
+    po: str | None = None,
+    job: str | None = None,
+    customer: str | None = None,
+) -> bool:
+    q = (query or "").strip()
+    field = normalize_shipper_search_by(search_by)
+    if q and len(q) >= field_min_len(field) and not shipper_matches_field(row, q, field, job_haystack):
+        return False
+    if term := ready_term(shipper):
+        if not shipper_matches_field(row, term, "shipper", job_haystack):
+            return False
+    if term := ready_term(po, 2):
+        if not shipper_matches_field(row, term, "po", job_haystack):
+            return False
+    if term := ready_term(job, 2):
+        if not shipper_matches_field(row, term, "job", job_haystack):
+            return False
+    if term := ready_term(customer):
+        if not shipper_matches_field(row, term, "customer", job_haystack):
+            return False
+    return True
 
 
 def _shipper_recency_key(row: ShopKeeperShipperRow) -> tuple[int, str]:
@@ -97,11 +167,24 @@ def paginate_shippers(
     search_by: str | None,
     page: int,
     page_size: int,
+    shipper: str | None = None,
+    po: str | None = None,
+    job: str | None = None,
+    customer: str | None = None,
 ) -> tuple[list[ShopKeeperShipperRow], int]:
-    q = (query or "").strip()
-    field = normalize_shipper_search_by(search_by)
     matched = [
-        row for row, haystack in rows if not q or shipper_matches_field(row, q, field, haystack)
+        row
+        for row, haystack in rows
+        if shipper_matches_filters(
+            row,
+            haystack,
+            query=query,
+            search_by=search_by,
+            shipper=shipper,
+            po=po,
+            job=job,
+            customer=customer,
+        )
     ]
     matched.sort(key=_shipper_recency_key, reverse=True)
     total = len(matched)
@@ -123,6 +206,31 @@ def part_matches_field(row: PartMasterListRow, query: str, search_by: str) -> bo
     return q in (row.part_number or "").casefold()
 
 
+def part_matches_filters(
+    row: PartMasterListRow,
+    *,
+    query: str | None = None,
+    search_by: str | None = None,
+    part: str | None = None,
+    customer: str | None = None,
+    description: str | None = None,
+) -> bool:
+    q = (query or "").strip()
+    field = normalize_part_search_by(search_by)
+    if q and not part_matches_field(row, q, field):
+        return False
+    if term := ready_term(part):
+        if not part_matches_field(row, term, "part"):
+            return False
+    if term := ready_term(customer):
+        if not part_matches_field(row, term, "customer"):
+            return False
+    if term := ready_term(description):
+        if not part_matches_field(row, term, "description"):
+            return False
+    return True
+
+
 def paginate_parts(
     rows: list[PartMasterListRow],
     *,
@@ -130,18 +238,26 @@ def paginate_parts(
     search_by: str | None,
     page: int,
     page_size: int,
+    part: str | None = None,
+    customer: str | None = None,
+    description: str | None = None,
 ) -> tuple[list[PartMasterListRow], int]:
-    q = (query or "").strip()
-    field = normalize_part_search_by(search_by)
-    matched = [row for row in rows if not q or part_matches_field(row, q, field)]
+    matched = [
+        row
+        for row in rows
+        if part_matches_filters(
+            row,
+            query=query,
+            search_by=search_by,
+            part=part,
+            customer=customer,
+            description=description,
+        )
+    ]
     matched.sort(key=lambda row: row.pm_linkid, reverse=True)
     total = len(matched)
     start = max(0, (page - 1) * page_size)
     return matched[start : start + page_size], total
-
-
-def po_group_key(job: ShopKeeperJobRow) -> tuple[str, str]:
-    return ((job.customer_code or "").strip(), (job.po_number or "").strip())
 
 
 def po_group_from_jobs(jobs: list[ShopKeeperJobRow]) -> ShopKeeperPoGroupRow:
@@ -159,34 +275,6 @@ def po_group_from_jobs(jobs: list[ShopKeeperJobRow]) -> ShopKeeperPoGroupRow:
     )
 
 
-def paginate_po_groups(
-    jobs: list[ShopKeeperJobRow],
-    *,
-    query: str | None,
-    search_by: str | None,
-    page: int,
-    page_size: int,
-) -> tuple[list[ShopKeeperPoGroupRow], int]:
-    q = (query or "").strip()
-    field = normalize_search_by(search_by)
-    matching_keys = {po_group_key(job) for job in jobs if not q or job_matches_field(job, q, field)}
-    grouped: dict[tuple[str, str], list[ShopKeeperJobRow]] = {}
-    for job in jobs:
-        key = po_group_key(job)
-        if key not in matching_keys:
-            continue
-        grouped.setdefault(key, []).append(job)
-    ranked = [
-        (po_group_from_jobs(items), max(_job_recency_key(job) for job in items))
-        for items in grouped.values()
-    ]
-    ranked.sort(key=lambda pair: pair[1], reverse=True)
-    rows = [row for row, _recency in ranked]
-    total = len(rows)
-    start = max(0, (page - 1) * page_size)
-    return rows[start : start + page_size], total
-
-
 def paginate_jobs(
     jobs: list[ShopKeeperJobRow],
     *,
@@ -194,10 +282,24 @@ def paginate_jobs(
     search_by: str | None,
     page: int,
     page_size: int,
+    po: str | None = None,
+    job: str | None = None,
+    part: str | None = None,
+    customer: str | None = None,
 ) -> tuple[list[ShopKeeperJobRow], int]:
-    q = (query or "").strip()
-    field = normalize_search_by(search_by)
-    matched = [job for job in jobs if not q or job_matches_field(job, q, field)]
+    matched = [
+        row
+        for row in jobs
+        if job_matches_filters(
+            row,
+            query=query,
+            search_by=search_by,
+            po=po,
+            job_number=job,
+            part=part,
+            customer=customer,
+        )
+    ]
     matched.sort(key=_job_recency_key, reverse=True)
     total = len(matched)
     start = max(0, (page - 1) * page_size)

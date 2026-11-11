@@ -2,6 +2,7 @@ import type {
   CreatePrintResult,
   CustomerLookupResponse,
   CustomerSuggestion,
+  DirectPrintResult,
   JobHeaderPayload,
   JobPage,
   PartEditor,
@@ -13,7 +14,7 @@ import type {
   PoDraft,
   PoListResponse,
   PriceLookupResponse,
-  ShopKeeperPoGroupListResponse,
+  PrintStatus,
   ShopKeeperPoListResponse,
   ShopKeeperPoPage,
   ShopKeeperShipperListResponse,
@@ -171,9 +172,6 @@ export const api = {
   listShopKeeperPurchaseOrders(params: URLSearchParams) {
     return request<ShopKeeperPoListResponse>(`/api/shopkeeper/purchase-orders?${params.toString()}`);
   },
-  listShopKeeperPoGroups(params: URLSearchParams) {
-    return request<ShopKeeperPoGroupListResponse>(`/api/shopkeeper/purchase-order-groups?${params.toString()}`);
-  },
   getShopKeeperPo(customerCode: string, poNumber: string) {
     const params = new URLSearchParams({ customer_code: customerCode, po: poNumber });
     return request<ShopKeeperPoPage>(`/api/shopkeeper/purchase-orders/detail?${params.toString()}`);
@@ -272,6 +270,32 @@ export const api = {
   },
   markTravelerPrinted(jobNumber: string) {
     return request<void>(`/api/jobs/${encodeURIComponent(jobNumber)}/print/mark-traveler`, { method: "POST" });
+  },
+  getShipperPdf(shipNumber: string, copies: string[], preparedBy?: string | null) {
+    const params = new URLSearchParams();
+    for (const copy of copies) params.append("copies", copy);
+    if (preparedBy) params.set("prepared_by", preparedBy);
+    return requestPdf(`/api/shopkeeper/shippers/${encodeURIComponent(shipNumber)}/print?${params.toString()}`);
+  },
+  getPrintStatus() {
+    return request<PrintStatus>("/api/print/status");
+  },
+  printJobDirect(jobNumber: string, documents: { traveler: boolean; certification: boolean }) {
+    return request<DirectPrintResult>(`/api/jobs/${encodeURIComponent(jobNumber)}/print/direct`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(documents),
+    });
+  },
+  printShipperDirect(shipNumber: string, copies: string[], preparedBy?: string | null) {
+    return request<DirectPrintResult>(`/api/shopkeeper/shippers/${encodeURIComponent(shipNumber)}/print/direct`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ copies, prepared_by: preparedBy ?? null }),
+    });
+  },
+  markShipperPrinted(shipNumber: string) {
+    return request<void>(`/api/shopkeeper/shippers/${encodeURIComponent(shipNumber)}/print/mark`, { method: "POST" });
   },
   listParts(params: URLSearchParams) {
     return request<PartListResponse>(`/api/parts?${params.toString()}`);

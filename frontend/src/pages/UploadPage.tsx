@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { cn } from "@/lib/utils";
 
 type SelectedFile = {
@@ -22,6 +23,7 @@ function isPdf(file: File): boolean {
 }
 
 export function UploadPage() {
+  useDocumentTitle(["Upload PO"]);
   const navigate = useNavigate();
   const [files, setFiles] = useState<SelectedFile[]>([]);
   const [skippedNonPdf, setSkippedNonPdf] = useState(0);

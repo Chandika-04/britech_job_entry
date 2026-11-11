@@ -29,6 +29,12 @@ def test_list_parts_search(client):
     assert missing.json()["items"] == []
     assert missing.json()["total"] == 0
 
+    both = client.get("/api/parts", params={"part": "MULTI", "customer": "CORTEC"})
+    assert [row["part_revision"] for row in both.json()["items"]] == ["B", "A"]
+
+    none = client.get("/api/parts", params={"part": "MULTI", "customer": "BAYADV"})
+    assert none.json()["items"] == []
+
 
 def test_create_and_update_part(client):
     FakeShopKeeper.reset_shared()

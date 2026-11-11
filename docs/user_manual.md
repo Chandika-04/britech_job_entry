@@ -68,8 +68,8 @@ This tab lists every PO that has been uploaded or typed in **this app**. Unfinis
 | **Status** | **Reading PDF**: still extracting. **Ready to check**: fields are filled. **Couldn't read**: open it to retry. **Typed in**: entered by hand, no PDF. |
 | **Check** | **Needs check**: someone still needs to verify it. **Checked**: marked correct. |
 | **Jobs** | **Jobs done**: every line has a ShopKeeper job. **Jobs open**: at least one line doesn't, including skipped lines. The number shows jobs created out of total lines, for example `4/6`. |
-| **Shipper** | Empty until every job is created. Then **Create shipper** makes one ShopKeeper shipper for all jobs on that PO and shows the ship number. Set **Prepared by** (your initials) in the top-right first; this browser keeps them for later shippers until you change them. If you create another job on that PO later, **Add to shipper** turns blue until that job is on the same shipper. Clicking the button does not open the PO. |
-| **Flags** | **Duplicate**: this PO number was already entered for the same ShopKeeper customer. **Stuck**: extraction seems stuck. **N warnings**: the number of review warnings. |
+| **Shipper** | Empty until every job is created. Then **Create shipper** makes one ShopKeeper shipper for all jobs on that PO and shows the ship number. Click the shipper number to open it. Set **Prepared by** (your initials) in the top-right first; this browser keeps them for later shippers until you change them. If you create another job on that PO later, **Add to shipper** turns blue until that job is on the same shipper. Clicking the button does not open the PO. |
+| **Flags** | **Wrong vendor**: the PO is addressed to another company, not Britech, so nothing was extracted. Open it, check the PDF, then **Delete this PO** (or **Re-extract** if the scan was misread). **Duplicate**: this PO number was already entered for the same ShopKeeper customer. **Stuck**: extraction seems stuck. **N warnings**: the number of review warnings. |
 
 **Search and sort:** type a PO number or customer name and press **Enter** (or click **Search**). The default sort is **Needs attention first**. You can also sort by date, PO number, or customer.
 
@@ -82,13 +82,11 @@ The list updates by itself every few seconds while this tab is in front. If you 
 This tab lists **jobs already in ShopKeeper**. It is not the work list of PDFs uploaded in this app.
 
 1. Open **ShopKeeper jobs**. The newest jobs appear first.
-2. Choose what to search by: **PO #** (default), **Part number**, **Job number**, or **Customer**.
-3. Type the value and press **Enter** (or click **Search**).
-4. Optional: click **Group by PO** to list one row per customer and PO number instead of individual jobs. Searching still finds matching jobs, then shows the whole PO those jobs belong to.
-5. Click a **PO #** to open a summary of every job on that purchase order for that customer. Click a **Job #** to open that ShopKeeper job. **Job #** and **Ship #** are on the blue bar. The part image sits to the right of the job details. If the part has no picture, the placeholder is shown; if a picture is linked but cannot be opened, the saved file path is shown instead. Edit customer, PO, line, date (when the job was entered), part, qty, price, unit, **Certification**, and **Job Notes**, then **Save job details**. **Total** is qty × price for Each, or just the price for Lot. Job notes save to ShopKeeper and print on the traveler. If a shipper already exists, the app asks you to confirm; confirming also updates that shipper’s quantity to match. Print, **Copy instructions** (from the part master), templates, and the operations table are below. Step notes show as plain text; ShopKeeper still stores them as HTML for the traveler.
-6. Use **Previous** / **Next** at the bottom of the page to move 300 jobs (or purchase orders) at a time.
+2. Type into the **PO #**, **Job #**, **Part number**, and **Customer** boxes. Filled boxes combine: a PO and a part show only jobs matching both. Results update as you type. Job and PO number wait for 2 characters. **Clear all** empties every box. Hover the **Status** column header for S / I.
+3. Click a **PO #** to open a summary of every job on that purchase order for that customer. Click a **Job #** to open that ShopKeeper job. **Job #** and **Ship #** are on the blue bar. **View PO** and **View shipper** sit next to those fields. The part image sits to the right of the job details. If the part has no picture, the placeholder is shown; if a picture is linked but cannot be opened, the saved file path is shown instead. Edit customer, PO, line, date (when the job was entered), part, qty, price, unit, **Certification**, and **Job Notes**, then **Save job details**. **Total** is qty × price for Each, or just the price for Lot. Job notes save to ShopKeeper and print on the traveler. If a shipper already exists, the app asks you to confirm; confirming also updates that shipper’s quantity to match. Print, **Copy instructions** (from the part master), templates, and the operations table are below. Step notes show as plain text; ShopKeeper still stores them as HTML for the traveler.
+4. Use **Previous** / **Next** at the bottom of the page to move 300 jobs at a time.
 
-The number in the header is the job count, or the purchase-order count when **Group by PO** is on. **Status** is the ShopKeeper ship-line status (`S` shipped, `I` invoiced). Blank means it has not shipped yet. A **Shipper** number opens that shipper. Jobs without a PO number are grouped together for that customer as **(no PO number)**.
+The number in the header is the job count. **Status** is the ShopKeeper ship-line status (`S` shipped, `I` invoiced). Blank means it has not shipped yet. A **Shipper** number opens that shipper. Jobs without a PO number are grouped together for that customer as **(no PO number)**. Each list tab remembers its search when you leave and come back; click the tab you are already on to clear it. **Copy PO summary** on Review and the PO summary copies a line table for Outlook.
 
 ---
 
@@ -97,10 +95,9 @@ The number in the header is the job count, or the purchase-order count when **Gr
 This tab lists **shippers already in ShopKeeper**. It is not the work list, and it does not create shippers. Create and add jobs to a shipper from the **Work list** after the PO’s jobs exist.
 
 1. Open **Shippers**. The newest shipper numbers appear first.
-2. Choose what to search by: **Shipper #** (default), **PO #**, **Job number**, or **Customer**.
-3. Type the value and press **Enter** (or click **Search**).
-4. Click a **Shipper #** to see the jobs on that shipper. **Prepared by** is the initials stored on the shipper in ShopKeeper (`Jsm_ShipBy`). Click a **Job #** to open the job. If a shipper is **invoiced** (`I`), a warning says it cannot be unlinked or deleted here.
-5. Use **Previous** / **Next** to move 300 shippers at a time.
+2. Type into the **Shipper #**, **PO #**, **Job #**, and **Customer** boxes. Filled boxes combine. Results update as you type.
+3. Click a **Shipper #** to see the jobs on that shipper. Click a **PO #** on the list or on the shipper page to open that purchase order. **Prepared by** is the initials stored on the shipper in ShopKeeper (`Jsm_ShipBy`). Click a **Job #** to open the job. If a shipper is **invoiced** (`I`), a warning says it cannot be unlinked or deleted here.
+4. Use **Previous** / **Next** to move 300 shippers at a time.
 
 **Status:** `S` = shipped, `I` = invoiced.
 
@@ -111,11 +108,10 @@ This tab lists **shippers already in ShopKeeper**. It is not the work list, and 
 This tab is the ShopKeeper **part master**. Search existing parts, open one to edit it, or create a new Production part.
 
 1. Open **Parts**. The newest parts appear first.
-2. Choose what to search by: **Part number** (default), **Customer**, or **Description**.
-3. Type the value and press **Enter** (or click **Search**).
-4. Click a **Part #** to open the part editor. Edit part number, rev (blank saves as `-`), customer code, and description, then **Save part details**. Below that: **operations** (copied onto new jobs), **traveler picture** (link a file already on the PartPhotos share; the app does not copy it), **certification** link, and **quality hold**. Price matrix is shown as a placeholder until pricing is standardized.
-5. Click **New part** to create a part. Part number and customer code are required. Rev defaults to `-`. Description defaults to the part number if you leave it blank. After create, the editor opens so you can add operations, a picture, and a cert.
-6. Use **Previous** / **Next** to move 300 parts at a time.
+2. Type into the **Part number**, **Customer**, and **Description** boxes. Filled boxes combine. Results update as you type.
+3. Click a **Part #** to open the part editor. Edit part number, rev (blank saves as `-`), customer code, and description, then **Save part details**. Below that: **operations** (copied onto new jobs), **traveler picture** (link a file already on the PartPhotos share; the app does not copy it), **certification** link, and **quality hold**. Price matrix is shown as a placeholder until pricing is standardized.
+4. Click **New part** to create a part. Part number and customer code are required. Rev defaults to `-`. Description defaults to the part number if you leave it blank. After create, the editor opens so you can add operations, a picture, and a cert.
+5. Use **Previous** / **Next** to move 300 parts at a time.
 
 A part number plus revision can only exist once as a Production part. If that pair already exists, the app refuses to create or rename onto it.
 
@@ -134,6 +130,16 @@ The review page shows the **original PDF** on the left and a **PO header** plus 
 ### Warnings
 
 If a shipper already exists for this PO, a green **Shipper created** box appears above the warnings and shows the ShopKeeper shipper number.
+
+### Shipper button (top right)
+
+Once every line has a job, the shipper button at the top of the page works like the Work list's, then prints the packing list:
+
+- **Create shipper and print** makes one ShopKeeper shipper for all jobs on the PO (it asks for your **Prepared by** initials if they are not set), then opens the print box.
+- **Add to shipper N and print** appears when a job was created after the shipper. It adds that job to the same shipper and opens the print box.
+- **Print shipper N** reprints when every job is already on the shipper.
+
+The print box lets you choose **Customer Copy**, **Shipping Dept Copy**, and **Office Copy** (each prints the full packing list with that label at the bottom; Customer and Shipping Dept are ticked to start, and this browser remembers what you pick), and **Print preview** or **Print**. After a real print, ShopKeeper marks the shipper printed. If printing fails, the shipper is still created; print it again with this button or **Print packing list** on the Shipper page. The button is greyed out until every line has a job (skipped lines count as not done).
 
 A yellow **Review warnings** box lists anything the app is unsure about. Examples are missing pages, handwriting it couldn't read, a missing quantity, or notes from the extraction such as "no unit price shown on this PO". Read these warnings before confirming.
 
@@ -172,7 +178,7 @@ Click a cell to type. The highlighted row (accent bar) is the line you are on. O
 
 ### Line details
 
-Details open under the line, inside the grid. They include the part matcher (or the matched part with **Change**), credit-hold and duplicate checks, line notes, **Price lookup**, and **Create job and print** when the line is ready. If the line already has a job, details show a mini job page: job fields (the same values as the grid row), operations, picture, **Save to ShopKeeper**, **Print**, and **Delete job**.
+Details open under the line, inside the grid. They include the part matcher (or the matched part with **Change**), credit-hold and duplicate checks, line notes, **Price lookup**, and **Create job and print** when the line is ready. If the line already has a job, details show a mini job page: job fields (the same values as the grid row), a read-only **Total** after unit price (qty × price for Each, or the price for Lot), operations, picture, **Save to ShopKeeper**, **Print**, and **Delete job**. **Copy PO summary** at the top copies a table of Line, Part, Rev, Qty, Unit (Each or Lot), Unit price, and Ext for pasting into Outlook. If the browser blocks the copy, the button says **Couldn't copy**.
 
 ### Keyboard
 

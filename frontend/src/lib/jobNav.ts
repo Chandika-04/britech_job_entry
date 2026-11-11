@@ -1,5 +1,5 @@
 export type JobNavState = {
-  from: "purchase-orders" | "po-review" | "shippers" | "po-summary";
+  from: "purchase-orders" | "po-review" | "shippers" | "po-summary" | "work-list";
   poId?: number;
   shipNumber?: string;
   customerCode?: string;
@@ -12,7 +12,13 @@ const storageKey = (jobNumber: string) => `job-back:${jobNumber}`;
 function isJobNav(value: unknown): value is JobNavState {
   if (!value || typeof value !== "object" || !("from" in value)) return false;
   const from = (value as JobNavState).from;
-  return from === "purchase-orders" || from === "po-review" || from === "shippers" || from === "po-summary";
+  return (
+    from === "purchase-orders" ||
+    from === "po-review" ||
+    from === "shippers" ||
+    from === "po-summary" ||
+    from === "work-list"
+  );
 }
 
 export function rememberJobNav(jobNumber: string | undefined, locationState: unknown): JobNavState | null {

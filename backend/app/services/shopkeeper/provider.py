@@ -17,7 +17,6 @@ from app.services.shopkeeper.types import (
     PrintDocumentData,
     ShipWritePayload,
     ShopKeeperJobRow,
-    ShopKeeperPoGroupRow,
     ShopKeeperPoPage,
     ShopKeeperShipperPage,
     ShopKeeperShipperRow,
@@ -79,7 +78,15 @@ class ShopKeeperProvider(Protocol):
     def get_part_editor(self, pm_linkid: int) -> PartEditorRecord | None: ...
 
     def list_parts(
-        self, *, query: str | None, search_by: str, page: int, page_size: int
+        self,
+        *,
+        query: str | None,
+        search_by: str,
+        page: int,
+        page_size: int,
+        part: str | None = None,
+        customer: str | None = None,
+        description: str | None = None,
     ) -> tuple[list[PartMasterListRow], int]: ...
 
     def create_part(self, payload: PartHeaderUpdate) -> int: ...
@@ -103,20 +110,36 @@ class ShopKeeperProvider(Protocol):
     def mark_traveler_printed(self, job_number: str) -> None: ...
 
     def list_purchase_orders(
-        self, *, query: str | None, search_by: str, page: int, page_size: int
+        self,
+        *,
+        query: str | None,
+        search_by: str,
+        page: int,
+        page_size: int,
+        po: str | None = None,
+        job: str | None = None,
+        part: str | None = None,
+        customer: str | None = None,
     ) -> tuple[list[ShopKeeperJobRow], int]: ...
-
-    def list_po_groups(
-        self, *, query: str | None, search_by: str, page: int, page_size: int
-    ) -> tuple[list[ShopKeeperPoGroupRow], int]: ...
 
     def get_purchase_order(self, customer_code: str, po_number: str) -> ShopKeeperPoPage | None: ...
 
     def list_shippers(
-        self, *, query: str | None, search_by: str, page: int, page_size: int
+        self,
+        *,
+        query: str | None,
+        search_by: str,
+        page: int,
+        page_size: int,
+        shipper: str | None = None,
+        po: str | None = None,
+        job: str | None = None,
+        customer: str | None = None,
     ) -> tuple[list[ShopKeeperShipperRow], int]: ...
 
     def get_shipper(self, ship_number: str) -> ShopKeeperShipperPage | None: ...
+
+    def mark_shipper_printed(self, ship_number: str) -> None: ...
 
     def lookup_prices(
         self,

@@ -1,6 +1,6 @@
 # Shipping (steps 12–14)
 
-**Status:** Implemented (create shipper on the work list, plus a **Shippers** tab to look up existing ShopKeeper shippers). Printing is out of scope until an example packing-slip / shipper PDF is in [`references/`](../references/) (same folder as traveler and certification samples).
+**Status:** Implemented (create shipper on the work list and on the PO review page, a **Shippers** tab to look up existing ShopKeeper shippers, and packing-list printing — see [Printing](#printing)).
 
 **SQL source of truth:** [`references/job_entry_write_sequence.md`](../references/job_entry_write_sequence.md) §5 (Shipping) and the step table at the end of that file. Use that document whenever column names, `SystemID` concurrency, `SSMA_TimeStamp` updates, or the loop over releases are unclear. Also see [`references/table_schema.md`](../references/table_schema.md) (`SystemID`, `JobShipMaster`, `JobShip`, `JobRelease`) and the ship phase in [`references/shopkeeper_job_entry_outline.md`](../references/shopkeeper_job_entry_outline.md).
 
@@ -10,7 +10,7 @@
 
 When every line on a PO has a created ShopKeeper job (`jobs_complete`), the reviewer can create **one shipper for the whole PO**. That shipper includes **every job / PO line** on that PO. The dashboard then shows the ShopKeeper ship number on that PO’s row.
 
-This is ShopKeeper steps **12–14** only (reserve ship number, insert `JobShipMaster`, attach each job’s `JobShip` release). Do **not** set `Jsm_ShipperPrinted`. Do **not** call Access. Do **not** generate a PDF yet.
+This is ShopKeeper steps **12–14** only (reserve ship number, insert `JobShipMaster`, attach each job’s `JobShip` release). Creating the shipper does **not** set `Jsm_ShipperPrinted`; only a real print does (see [Printing](#printing)). Do **not** call Access.
 
 ## UI
 
@@ -62,7 +62,7 @@ Keep ship-number reserve **outside** the rest of the transaction and commit it i
 
 4. **This app:** save `shipper_number` on `po_request`. Audit the write (`erp_write_audit`: action `create_shipper`).
 
-5. **Step 15 — skip.** Do not set `Jsm_ShipperPrinted`.
+5. **Step 15 — after printing only.** Creating the shipper leaves `Jsm_ShipperPrinted = 0`; the print endpoint sets it to 1 after the packing list is printed.
 
 **LockInfo:** `Lk_Form = 'Jobs'`, `Lk_ID` = ship number, `Lk_Initials = 'AUTO'`, `Lk_Comment = 'Shipper via Automation'`.
 
@@ -97,10 +97,12 @@ Fake ShopKeeper: given a PO with two created jobs, create-shipper reserves one s
 - Creating customers or parts
 - Live ShopKeeper database until `SHOPKEEPER_EXPECTED_DATABASE` is changed on purpose
 
-## Printing (later)
+## Printing
 
-Rebuild a packing-slip PDF in this app and print it to the **saved warehouse printer** (same as traveler/cert). Layout follows the shipper example PDF in [`references/`](../references/) (for example `example_shipper.pdf`). All print samples live in `references/` only — never `docs/`.
+**Status:** Implemented. The app rebuilds ShopKeeper's packing list (**SK055 Rev B**) from [`references/singlejob-shipperexample.pdf`](../references/singlejob-shipperexample.pdf) and [`references/multijob-shipperexample.pdf`](../references/multijob-shipperexample.pdf) (`build_shipper_pdf` in `services/print/documents.py`) and prints it through the browser print dialog, like the traveler. No Access COM.
 
-After a successful print, set `Jsm_ShipperPrinted = 1` (step 15). Do not use Access COM.
-
-Until that example file is in `references/` and this section is implemented, shipper documents are produced in ShopKeeper by a person if the floor still needs paper.
+- **Where:** PO review page and manual entry page (**Create shipper and print**, **Add to shipper N and print**, or **Print shipper N** once every job is on it), and the **Print packing list** button on the Shipper page (reprints).
+- **Copies:** one page set per chosen footer label: Customer Copy, Shipping Dept Copy, Office Copy (Customer Copy and Shipping Dept Copy by default; Office Copy when ticked; the browser remembers the choice).
+- **Content:** Packing List box (ship number, terms from the customer's `Payment Terms`, ship date, PO number with a Code 39 barcode, ship via, page), SHIPPED TO from the customer's ship-to (else bill-to) address, one row per job (ship qty from `Sh_Qty_Shipped`, UOM, part, rev, description, `Job Rel 1`, PO line) in PO-line order, 9 rows per page, comments from `Jsm_ShipperNote`, and Prepared By from `Jsm_ShipBy`.
+- **API:** `GET /api/shopkeeper/shippers/{n}/print?copies=…` returns the PDF; `POST /api/shopkeeper/shippers/{n}/print/mark` sets `Jsm_ShipperPrinted = 1` (step 15, `SSMA_TimeStamp` check) after a real print. Preview does not mark it.
+- **Failure:** if the shipper is created but printing fails, the shipper stays; print it again from the PO review page or the Shipper page.

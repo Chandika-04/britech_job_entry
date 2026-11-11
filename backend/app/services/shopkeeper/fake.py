@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
@@ -10,7 +11,6 @@ from app.services.shopkeeper.lookup import (
     _job_recency_key,
     paginate_jobs,
     paginate_parts,
-    paginate_po_groups,
     paginate_shippers,
     po_group_from_jobs,
     sort_price_history,
@@ -223,6 +223,8 @@ class FakeShopKeeper:
                 order_date=date(2026, 9, 28),
                 cert_required=True,
                 shipper_number=None,
+                unit_price=Decimal("9.25"),
+                unit="Each",
             ),
             ShopKeeperJobRow(
                 job_number="199102",
@@ -238,6 +240,8 @@ class FakeShopKeeper:
                 order_date=date(2026, 9, 28),
                 cert_required=True,
                 shipper_number=None,
+                unit_price=Decimal("150.00"),
+                unit="Lot",
             ),
             ShopKeeperJobRow(
                 job_number="199201",
@@ -497,6 +501,8 @@ class FakeShopKeeper:
                 order_date=date.today(),
                 cert_required=payload.cert_required,
                 shipper_number=None,
+                unit_price=payload.unit_price,
+                unit=payload.unit,
             )
         )
         self.price_history.append(
@@ -667,6 +673,10 @@ class FakeShopKeeper:
         search_by: str = "po",
         page: int = 1,
         page_size: int = 20,
+        po: str | None = None,
+        job: str | None = None,
+        part: str | None = None,
+        customer: str | None = None,
     ) -> tuple[list[ShopKeeperJobRow], int]:
         self.current_database()
         return paginate_jobs(
@@ -675,23 +685,10 @@ class FakeShopKeeper:
             search_by=search_by,
             page=page,
             page_size=page_size,
-        )
-
-    def list_po_groups(
-        self,
-        *,
-        query: str | None = None,
-        search_by: str = "po",
-        page: int = 1,
-        page_size: int = 20,
-    ):
-        self.current_database()
-        return paginate_po_groups(
-            self.job_records,
-            query=query,
-            search_by=search_by,
-            page=page,
-            page_size=page_size,
+            po=po,
+            job=job,
+            part=part,
+            customer=customer,
         )
 
     def get_purchase_order(self, customer_code: str, po_number: str) -> ShopKeeperPoPage | None:
@@ -724,6 +721,7 @@ class FakeShopKeeper:
         meta = self.shipper_meta.get(ship_number, {})
         pos = sorted({row.po_number for row in jobs if row.po_number})
         names = [row.customer_name or row.customer_code for row in jobs if row.customer_name or row.customer_code]
+        codes = [row.customer_code for row in jobs if row.customer_code]
         return ShopKeeperShipperRow(
             shipper_number=ship_number,
             status=meta.get("status") or ("I" if any(row.status == "I" for row in jobs) else "S" if jobs else None),
@@ -735,6 +733,7 @@ class FakeShopKeeper:
             job_count=len(jobs),
             customer_name=names[0] if names else None,
             po_numbers=", ".join(pos) if pos else None,
+            customer_code=codes[0] if codes else None,
         )
 
     def list_shippers(
@@ -744,6 +743,10 @@ class FakeShopKeeper:
         search_by: str = "shipper",
         page: int = 1,
         page_size: int = 20,
+        shipper: str | None = None,
+        po: str | None = None,
+        job: str | None = None,
+        customer: str | None = None,
     ) -> tuple[list[ShopKeeperShipperRow], int]:
         self.current_database()
         packed: list[tuple[ShopKeeperShipperRow, str]] = []
@@ -761,7 +764,17 @@ class FakeShopKeeper:
                 f"{row.job_number} {row.po_number} {row.customer_code} {row.customer_name or ''}" for row in jobs
             )
             packed.append((self._shipper_row(ship_num, jobs), haystack.casefold()))
-        return paginate_shippers(packed, query=query, search_by=search_by, page=page, page_size=page_size)
+        return paginate_shippers(
+            packed,
+            query=query,
+            search_by=search_by,
+            page=page,
+            page_size=page_size,
+            shipper=shipper,
+            po=po,
+            job=job,
+            customer=customer,
+        )
 
     def get_shipper(self, ship_number: str) -> ShopKeeperShipperPage | None:
         self.current_database()
@@ -784,8 +797,18 @@ class FakeShopKeeper:
             po_numbers=row.po_numbers,
             tracking_number=meta.get("tracking"),
             note=meta.get("note"),
-            jobs=jobs,
+            jobs=[
+                replace(job, quantity_shipped=self.ship_qty.get(job.job_number, job.quantity)) for job in jobs
+            ],
+            customer_code=row.customer_code,
         )
+
+    def mark_shipper_printed(self, ship_number: str) -> None:
+        self.current_database()
+        number = (ship_number or "").strip()
+        if self.get_shipper(number) is None:
+            raise AppError("Shipper not found.", status_code=404)
+        self.shipper_meta.setdefault(number, {})["printed"] = True
 
     def lookup_prices(
         self,
@@ -1071,6 +1094,9 @@ class FakeShopKeeper:
         search_by: str = "part",
         page: int = 1,
         page_size: int = 20,
+        part: str | None = None,
+        customer: str | None = None,
+        description: str | None = None,
     ) -> tuple[list[PartMasterListRow], int]:
         self.current_database()
         return paginate_parts(
@@ -1079,6 +1105,9 @@ class FakeShopKeeper:
             search_by=search_by,
             page=page,
             page_size=page_size,
+            part=part,
+            customer=customer,
+            description=description,
         )
 
     def create_part(self, payload: PartHeaderUpdate) -> int:

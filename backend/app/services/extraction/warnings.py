@@ -7,6 +7,19 @@ from app.schemas.extraction import ExtractionResult, WarningItem
 
 DUPLICATE_CODES = {"duplicate_po", "duplicate_po_confirmed"}
 
+# The extraction prompt (prompt.py, "Vendor check") starts its warning with this when the PO
+# is addressed to another company and nothing was extracted.
+WRONG_VENDOR_PREFIX = "WRONG VENDOR"
+WRONG_VENDOR_CODE = "wrong_vendor"
+
+
+def wrong_vendor_warning(extraction: ExtractionResult) -> WarningItem | None:
+    for model_warning in extraction.warnings:
+        text = (model_warning or "").strip()
+        if text.upper().startswith(WRONG_VENDOR_PREFIX):
+            return WarningItem(code=WRONG_VENDOR_CODE, message=text, severity="prominent")
+    return None
+
 
 def find_duplicate_pos(
     db: Session,
@@ -86,6 +99,12 @@ def build_warnings(
     *,
     exclude_id: int | None = None,
 ) -> list[WarningItem]:
+    # A PO sent to the wrong vendor has nothing extracted on purpose, so the usual
+    # "missing PO number / no line items" warnings would only bury the real reason.
+    wrong_vendor = wrong_vendor_warning(extraction)
+    if wrong_vendor is not None:
+        return [wrong_vendor]
+
     warnings: list[WarningItem] = []
 
     if not extraction.po_number:

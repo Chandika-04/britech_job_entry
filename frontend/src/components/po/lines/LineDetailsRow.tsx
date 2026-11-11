@@ -9,7 +9,7 @@ import { CreateJobButton, LineDetail, type RunLine } from "@/components/po/lines
 import { LinePartMatch } from "@/components/po/lines/LinePartMatch";
 import { isLineCreated, isLineLocked, lineFieldsDirty, poCustomerCode, UNITS } from "@/components/po/lines/helpers";
 import { Button } from "@/components/ui/button";
-import { cn, formatDate, formatUsd } from "@/lib/utils";
+import { cn, formatDate, formatUsd, lineTotal } from "@/lib/utils";
 import type { JobPage, LineItem, LineItemDraft, PartCandidate, PartEditor, PoDetail } from "@/types/po";
 
 export function LineDetailsBody({
@@ -574,6 +574,15 @@ function MiniJob({
           aria-label="Unit price"
           onChange={(event) => onUpdate("unit_price", event.target.value)}
           onBlur={(event) => onUpdate("unit_price", formatUsd(event.currentTarget.value))}
+        />
+      </JobField>
+      <JobField label="Total">
+        <input
+          className="cell-input h-8 border-rule text-right font-mono"
+          value={lineTotal(item.quantity, item.uom, item.unit_price)}
+          readOnly
+          tabIndex={-1}
+          aria-label="Total"
         />
       </JobField>
       <JobField label="Due date">

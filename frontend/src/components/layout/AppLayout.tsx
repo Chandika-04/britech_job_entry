@@ -1,9 +1,15 @@
+import { useEffect, useState, type ReactNode } from "react";
 import { Plus, Settings } from "lucide-react";
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
+import { api } from "@/api/client";
 import { PreparedByChip, PreparedByProvider } from "@/components/layout/PreparedBy";
 import { jobNavFromPath } from "@/lib/jobNav";
+import { isListTabPath, readTabSearch, writeTabSearch } from "@/lib/tabMemory";
+import { UnreviewedCountContext } from "@/lib/useDocumentTitle";
 import { cn } from "@/lib/utils";
+
+const UNREVIEWED_POLL_MS = 30000;
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -14,8 +20,89 @@ const tabClass = ({ isActive }: { isActive: boolean }) =>
 export function AppLayout() {
   return (
     <PreparedByProvider>
-      <AppShell />
+      <UnreviewedCountProvider>
+        <AppShell />
+      </UnreviewedCountProvider>
     </PreparedByProvider>
+  );
+}
+
+function UnreviewedCountProvider({ children }: { children: ReactNode }) {
+  const [count, setCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | null = null;
+    const load = () => {
+      const search = new URLSearchParams();
+      search.set("review_state", "unreviewed");
+      search.set("page_size", "1");
+      api
+        .listPos(search)
+        .then((result) => {
+          if (!cancelled) setCount(result.total);
+        })
+        .catch(() => undefined);
+    };
+    const stop = () => {
+      if (timer != null) {
+        window.clearInterval(timer);
+        timer = null;
+      }
+    };
+    const start = () => {
+      if (timer != null) return;
+      timer = window.setInterval(load, UNREVIEWED_POLL_MS);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        load();
+        start();
+      } else {
+        stop();
+      }
+    };
+    load();
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+  return <UnreviewedCountContext.Provider value={count}>{children}</UnreviewedCountContext.Provider>;
+}
+
+function TabLink({
+  to,
+  label,
+  isActive,
+  onListPage,
+}: {
+  to: string;
+  label: string;
+  isActive: boolean;
+  onListPage: boolean;
+}) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const saved = onListPage ? "" : readTabSearch(to);
+  return (
+    <NavLink
+      to={{ pathname: to, search: saved }}
+      end={to === "/"}
+      className={() => tabClass({ isActive })}
+      onClick={(event) => {
+        if (!onListPage) return;
+        writeTabSearch(to, "");
+        if (location.pathname === to && location.search) {
+          event.preventDefault();
+          navigate(to);
+        }
+      }}
+    >
+      {label}
+    </NavLink>
   );
 }
 
@@ -25,7 +112,6 @@ function AppShell() {
   const jobNav = jobNavFromPath(pathname, location.state);
   const isPartsList = pathname === "/parts";
   const onParts = pathname === "/parts" || pathname.startsWith("/parts/");
-  const isPoSummary = pathname === "/purchase-orders/detail";
   const isFullList =
     pathname === "/" || pathname.startsWith("/purchase-orders") || pathname === "/shippers" || isPartsList;
   const onShippers = pathname.startsWith("/shippers") || jobNav?.from === "shippers";
@@ -33,10 +119,17 @@ function AppShell() {
     pathname === "/" ||
     pathname.startsWith("/po/") ||
     /^\/manual\/.+/.test(pathname) ||
-    jobNav?.from === "po-review";
+    jobNav?.from === "po-review" ||
+    jobNav?.from === "work-list";
   const isNewPo = pathname === "/new" || pathname === "/upload" || pathname === "/manual";
   const isSettings = pathname === "/settings";
   const isPoReview = /^\/po\/[^/]+$/.test(pathname);
+
+  useEffect(() => {
+    if (!isListTabPath(pathname)) return;
+    writeTabSearch(pathname, location.search);
+  }, [pathname, location.search]);
+
   return (
     <div className={cn("flex flex-col bg-page text-ink", isFullList ? "h-dvh overflow-hidden" : "min-h-dvh")}>
       <header className="sticky top-0 z-20">
@@ -79,25 +172,20 @@ function AppShell() {
         </div>
         <nav className="border-b border-rule bg-white">
           <div className="mx-auto flex w-[94vw] max-w-[1520px] gap-1 overflow-x-auto">
-            <NavLink to="/" className={() => tabClass({ isActive: isWorkList })} end>
-              Work list
-            </NavLink>
-            <NavLink
-              to={{ pathname: "/purchase-orders", search: "" }}
-              className={({ isActive }) =>
-                tabClass({
-                  isActive: (isActive || isPoSummary || jobNav?.from === "purchase-orders" || jobNav?.from === "po-summary") && !onShippers,
-                })
+            <TabLink to="/" label="Work list" isActive={isWorkList} onListPage={pathname === "/"} />
+            <TabLink
+              to="/purchase-orders"
+              label="ShopKeeper jobs"
+              isActive={
+                (pathname.startsWith("/purchase-orders") ||
+                  jobNav?.from === "purchase-orders" ||
+                  jobNav?.from === "po-summary") &&
+                !onShippers
               }
-            >
-              ShopKeeper jobs
-            </NavLink>
-            <NavLink to="/shippers" className={() => tabClass({ isActive: onShippers })}>
-              Shippers
-            </NavLink>
-            <NavLink to="/parts" className={() => tabClass({ isActive: onParts })}>
-              Parts
-            </NavLink>
+              onListPage={pathname === "/purchase-orders"}
+            />
+            <TabLink to="/shippers" label="Shippers" isActive={onShippers} onListPage={pathname === "/shippers"} />
+            <TabLink to="/parts" label="Parts" isActive={onParts} onListPage={isPartsList} />
             <NavLink to="/new" className={() => tabClass({ isActive: isNewPo })}>
               New PO
             </NavLink>

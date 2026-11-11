@@ -8,7 +8,7 @@ from pathlib import Path
 import fitz
 
 from app.services.shopkeeper.ops_util import note_plain_text
-from app.services.shopkeeper.types import PrintDocumentData
+from app.services.shopkeeper.types import CustomerRecord, PrintDocumentData, ShipperPrintData
 
 PAGE_W = 612.0
 PAGE_H = 792.0
@@ -488,3 +488,213 @@ def build_certification_pdf(data: PrintDocumentData) -> bytes:
     pdf = doc.tobytes()
     doc.close()
     return pdf
+
+
+# ---------------------------------------------------------------------------
+# Shipper / packing list (ShopKeeper form SK055 Rev B)
+# Layout measured from references/singlejob-shipperexample.pdf and multijob-shipperexample.pdf.
+# ---------------------------------------------------------------------------
+
+SHIPPER_COPIES = ("Customer Copy", "Shipping Dept Copy", "Office Copy")
+DEFAULT_SHIPPER_COPIES = ("Customer Copy", "Shipping Dept Copy")
+_SHIPPER_ROWS_PER_PAGE = 9
+_SHIPPER_ROW_H = 24.5
+_SHIPPER_TABLE_TOP = 271.0
+_SHIPPER_HEADER_H = 13.0
+# Column edges: Ship Qty | UOM | Part # | Rev. | Description | Job Ref. | PO Ln/Rel#
+_SHIPPER_COLS = (16.0, 73.0, 106.0, 211.0, 251.0, 406.0, 524.0, 592.0)
+_SHIPPER_HEADERS = ("Ship Qty", "UOM", "Part #", "Rev.", "Description", "Job Ref.", "PO Ln/Rel#")
+
+
+@lru_cache(maxsize=8)
+def _font_obj(face: str | None, bold: bool) -> fitz.Font:
+    if face:
+        path = _face_file(face)
+        if path:
+            return fitz.Font(fontfile=path)
+    return fitz.Font("hebo" if bold or (face and "bold" in face) else "helv")
+
+
+def _width(text: str, size: float, *, face: str | None = None, bold: bool = False) -> float:
+    return _font_obj(face, bold).text_length(text, fontsize=size)
+
+
+def _put_center(page: fitz.Page, cx: float, y: float, text: str, size: float, *, face: str | None = None, bold: bool = False) -> None:
+    _put(page, (cx - _width(text, size, face=face, bold=bold) / 2, y), text, size, face=face, bold=bold)
+
+
+def _put_right(page: fitz.Page, rx: float, y: float, text: str, size: float, *, face: str | None = None, bold: bool = False) -> None:
+    _put(page, (rx - _width(text, size, face=face, bold=bold), y), text, size, face=face, bold=bold)
+
+
+def _fit(text: str, max_width: float, size: float, *, face: str | None = None, bold: bool = False) -> str:
+    if _width(text, size, face=face, bold=bold) <= max_width:
+        return text
+    while text and _width(text + "…", size, face=face, bold=bold) > max_width:
+        text = text[:-1]
+    return text + "…" if text else ""
+
+
+def _clock_stamp() -> str:
+    now = datetime.now()
+    hour = now.strftime("%I").lstrip("0") or "12"
+    return f"{hour}:{now.strftime('%M:%S')} {now.strftime('%p')}"
+
+
+def _shipper_address(data: ShipperPrintData) -> list[str]:
+    record: CustomerRecord | None = data.ship_to or data.customer
+    shipper = data.shipper
+    name = _text((record.company if record else None) or shipper.customer_name or shipper.customer_code)
+    lines = [name] if name else []
+    if record is not None:
+        for line in record.address_block().splitlines():
+            line = line.strip()
+            if line and line != name:
+                lines.append(line)
+        country = _text(record.country)
+        if country and country not in lines:
+            lines.append(country)
+    return lines[:6]
+
+
+def _shipper_po_label(shipper) -> str:
+    pos = [po.strip() for po in (shipper.po_numbers or "").split(",") if po.strip()]
+    if not pos:
+        return ""
+    return pos[0] if len(pos) == 1 else f"{pos[0]} +{len(pos) - 1}"
+
+
+def _draw_shipper_header(page: fitz.Page, data: ShipperPrintData, page_no: int, page_count: int) -> None:
+    shipper = data.shipper
+    ship_no = _text(shipper.shipper_number)
+    terms = _text(data.customer.payment_terms if data.customer else None)
+
+    _put(page, (37, 52), BRITECH_NAME, 13.5, face="arial-bold")
+    _put(page, (37, 81), BRITECH_STREET, 9.5, face="arial-bold")
+    _put(page, (37, 94), BRITECH_CITY, 9.5, face="arial-bold")
+    _put(page, (37, 107), BRITECH_PHONE, 9.5, face="arial-bold")
+
+    # Packing List box: 3 rows x (Terms | Contact | Ship column)
+    x0, x1, x2, x3 = 339.0, 436.0, 501.0, 592.0
+    y0, y1, y2, y3 = 21.0, 46.0, 72.0, 99.0
+    _fill(page, fitz.Rect(x0, y0, x2, y1), LIGHT_GRAY)
+    _box(page, fitz.Rect(x0, y0, x3, y3), 0.9)
+    _line(page, x0, y1, x3, y1, 0.6)
+    _line(page, x0, y2, x3, y2, 0.6)
+    _line(page, x2, y0, x2, y3, 0.6)
+    _line(page, x1, y1, x1, y3, 0.6)
+    _put_center(page, (x0 + x2) / 2, 39, "Packing List", 12, face="arial-bold")
+    _put(page, (x2 + 3, y0 + 6), "Ship Number", 5.5, face="arial")
+    _put_center(page, (x2 + x3) / 2, 42, ship_no, 13, face="arial-bold")
+
+    _put(page, (x0 + 3, y1 + 6), "Terms", 5.5, face="arial")
+    _put_center(page, (x0 + x1) / 2, 66, _fit(terms, x1 - x0 - 6, 9, face="arial-bold"), 9, face="arial-bold")
+    _put(page, (x1 + 3, y1 + 6), "Contact", 5.5, face="arial")
+    _put(page, (x2 + 3, y1 + 6), "Ship Date", 5.5, face="arial")
+    _put_center(page, (x2 + x3) / 2 + 8, 67, _date(shipper.ship_date or date.today()), 9, face="arial-bold")
+
+    po_label = _shipper_po_label(shipper)
+    _put(page, (x0 + 3, y2 + 6), "PO Number", 5.5, face="arial")
+    _put_center(page, (x0 + x1) / 2, 93, _fit(po_label, x1 - x0 - 6, 9, face="arial-bold"), 9, face="arial-bold")
+    _put(page, (x1 + 3, y2 + 6), "Shipped Via", 5.5, face="arial")
+    _put_center(page, (x1 + x2) / 2, 93, _fit(_text(shipper.ship_via), x2 - x1 - 6, 8, face="arial-bold"), 8, face="arial-bold")
+    _put(page, (x2 + 3, y2 + 6), "Page", 5.5, face="arial")
+    _put_center(page, (x2 + x3) / 2 + 8, 93, f"{page_no} of {page_count}", 9, face="arial-bold")
+
+    first_po = po_label.split(" +")[0]
+    if first_po:
+        _draw_code39(page, x0 + 2, 100, first_po, height=10, module=0.75)
+
+    _put(page, (205, 155), f"Shipper #: {ship_no}", 9.5, face="arial-bold")
+    _box(page, fitz.Rect(21, 160, 325, 265), 0.9)
+    _put(page, (28, 169), "SHIPPED TO:", 6.5, face="arial-bold")
+    for i, line in enumerate(_shipper_address(data)):
+        _put(page, (24, 181 + i * 14), _fit(line, 296, 9.5, face="arial-bold"), 9.5, face="arial-bold")
+    _put(page, (52, 259), "Contact:", 9, face="arial-bold")
+
+
+def _draw_shipper_table(page: fitz.Page, jobs: list) -> None:
+    cols = _SHIPPER_COLS
+    top = _SHIPPER_TABLE_TOP
+    head_bottom = top + _SHIPPER_HEADER_H
+    _fill(page, fitz.Rect(cols[0], top, cols[-1], head_bottom), LIGHT_GRAY)
+    _box(page, fitz.Rect(cols[0], top, cols[-1], head_bottom), 0.8)
+    for x in cols[1:-1]:
+        _line(page, x, top, x, head_bottom, 0.6)
+    for i, label in enumerate(_SHIPPER_HEADERS):
+        _put_center(page, (cols[i] + cols[i + 1]) / 2, top + 10, label, 9, face="arial-bold")
+
+    y = head_bottom
+    for job in jobs:
+        base = y + 12
+        qty = job.quantity_shipped if job.quantity_shipped is not None else job.quantity
+        unit = "Lot" if _text(job.unit).lower() == "lot" else "Each"
+        _put_right(page, cols[1] - 4, base, "" if qty is None else str(qty), 9.5, face="arial-bold")
+        _put_right(page, cols[2] - 4, base, unit, 9.5, face="arial-bold")
+        _put(page, (cols[2] + 3, base), _fit(_text(job.part_number), cols[3] - cols[2] - 6, 8.5, face="arial-narrow-bold"), 8.5, face="arial-narrow-bold")
+        _put(page, (cols[3] + 3, base), _fit(_text(job.part_revision) or "-", cols[4] - cols[3] - 6, 9, face="arial-bold"), 9, face="arial-bold")
+        _put(page, (cols[4] + 3, base), _fit(_text(job.description), cols[5] - cols[4] - 6, 8, face="arial-narrow-bold"), 8, face="arial-narrow-bold")
+        _put(page, (cols[5] + 3, base), f"{_text(job.job_number)} Rel 1", 9.5, face="arial-bold")
+        _put(page, (cols[6] + 3, base), _text(job.po_line) or "1", 9.5, face="arial-bold")
+        for x in cols:
+            _line(page, x, y + 2, x, y + 18, 0.6)
+        _line(page, cols[0] + 4, y + _SHIPPER_ROW_H - 3, cols[-1], y + _SHIPPER_ROW_H - 3, 0.6)
+        y += _SHIPPER_ROW_H
+
+
+def _draw_shipper_footer(page: fitz.Page, data: ShipperPrintData, copy_label: str, page_no: int, page_count: int, stamp: str) -> None:
+    last = page_no == page_count
+    if last:
+        _fill(page, fitz.Rect(49, 514, 80, 524), LIGHT_GRAY)
+        _put(page, (51, 521.5), "Comments:", 5.4, face="arial-bold")
+        comments = fitz.Rect(82, 513, 551, 601)
+        _box(page, comments, 0.9)
+        note = note_plain_text(data.shipper.note) or ""
+        if note:
+            page.insert_textbox(
+                fitz.Rect(comments.x0 + 4, comments.y0 + 4, comments.x1 - 4, comments.y1 - 4),
+                note,
+                fontsize=9,
+                color=BLACK,
+                **_font_args("arial"),
+            )
+        _put(page, (45, 697), "Shipped by:  /  Received by:", 9, face="arial-bold")
+        _put(page, (312, 697), "Date:", 9, face="arial-bold")
+        _line(page, 45, 711, 290, 711, 0.8)
+        _line(page, 312, 711, 413, 711, 0.8)
+    _put(page, (507, 727), "SK055 Rev B", 7, face="arial")
+    _put(page, (32, 736), stamp, 7, face="arial")
+    prepared = _text(data.prepared_by) or _text(data.shipper.ship_by)
+    _put(page, (21, 746), f"Prepared By:  {prepared}" if prepared else "Prepared By:", 7, face="arial")
+    _put_center(page, 334, 748, copy_label, 12, face="arial-bold")
+    _put(page, (520, 748), f"Page {page_no} of {page_count}", 9.5, face="arial-bold")
+
+
+def build_shipper_pdf(data: ShipperPrintData, copies: tuple[str, ...] | list[str] = DEFAULT_SHIPPER_COPIES) -> bytes:
+    """One packing list per copy label (Customer / Shipping Dept / Office), each 1+ pages."""
+    jobs = sorted(
+        data.shipper.jobs,
+        key=lambda job: (_line_sort(job.po_line), _text(job.job_number)),
+    )
+    chunks = [jobs[i : i + _SHIPPER_ROWS_PER_PAGE] for i in range(0, len(jobs), _SHIPPER_ROWS_PER_PAGE)] or [[]]
+    page_count = len(chunks)
+    stamp = _clock_stamp()
+    labels = [label for label in copies if label] or list(SHIPPER_COPIES[:1])
+    doc = fitz.open()
+    try:
+        for label in labels:
+            for index, chunk in enumerate(chunks, start=1):
+                page = doc.new_page(width=PAGE_W, height=PAGE_H)
+                _draw_shipper_header(page, data, index, page_count)
+                _draw_shipper_table(page, chunk)
+                _draw_shipper_footer(page, data, label, index, page_count, stamp)
+        return doc.tobytes()
+    finally:
+        doc.close()
+
+
+def _line_sort(value: str | None) -> float:
+    try:
+        return float(_text(value))
+    except ValueError:
+        return float("inf")
