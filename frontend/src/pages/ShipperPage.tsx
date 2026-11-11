@@ -31,7 +31,12 @@ export function ShipperPage() {
   const [shipper, setShipper] = useState<ShopKeeperShipperPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
-  useDocumentTitle([shipNumber ? `Shipper ${shipNumber}` : "Shipper"]);
+  const shipperPos = (shipper?.po_numbers ?? "").split(",").map((po) => po.trim()).filter(Boolean);
+  useDocumentTitle([
+    "Shipper",
+    shipper?.customer_code,
+    shipperPos.length ? `PO ${shipperPos[0]}${shipperPos.length > 1 ? ` +${shipperPos.length - 1}` : ""}` : null,
+  ]);
 
   const load = useCallback(() => {
     if (!shipNumber) return;

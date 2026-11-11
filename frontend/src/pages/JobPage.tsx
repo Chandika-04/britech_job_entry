@@ -95,7 +95,7 @@ export function JobPage() {
     load().catch((err: Error) => setError(err.message));
   }, [jobNumber]);
 
-  useDocumentTitle(["Job " + (jobNumber || ""), job?.part_number || draft?.part_number]);
+  useDocumentTitle(["Job", job?.customer_code, job?.po_number?.trim() ? `PO ${job.po_number.trim()}` : null]);
   if (!jobNumber) return null;
 
   const backToPo = nav?.from === "po-review";

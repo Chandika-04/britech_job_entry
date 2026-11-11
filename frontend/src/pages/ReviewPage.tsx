@@ -414,7 +414,7 @@ export function ReviewPage() {
     return "All changes saved";
   }, [needsReconfirm, pending]);
 
-  useDocumentTitle([po?.po_number ? `PO ${po.po_number}` : "PO", po?.customer_name]);
+  useDocumentTitle([po?.po_number ? `PO ${po.po_number}` : "PO", po ? poCustomerCode(po) || po.customer_name : null]);
 
   if (error && !po) {
     return (

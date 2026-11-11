@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { poCustomerCode } from "@/components/po/lines/helpers";
 import { ShipperActions } from "@/components/po/ShipperActions";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { cn, focusNextEmpty, formatQty, formatUsd, handleEnterAdvance, todayIso } from "@/lib/utils";
@@ -167,7 +168,7 @@ export function ManualEntryPage() {
   const [pickedParts, setPickedParts] = useState<Record<number, PartCandidate>>({});
   useDocumentTitle([
     draft?.po_number || po?.po_number ? `PO ${draft?.po_number || po?.po_number}` : "Manual entry",
-    draft?.customer_name || po?.customer_name,
+    (po ? poCustomerCode(po) : "") || draft?.customer_name || po?.customer_name,
   ]);
 
   const load = async (poId: string) => {
