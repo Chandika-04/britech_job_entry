@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { rememberJobNav } from "@/lib/jobNav";
-import { poSummaryPath } from "@/lib/poSummary";
-import { cn, formatUsd, handleEnterAdvance, parseMoney } from "@/lib/utils";
+import { PoLink, poSummaryPath, ShipperLink } from "@/lib/poSummary";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
+import { cn, formatUsd, handleEnterAdvance, lineTotal, parseMoney } from "@/lib/utils";
 import type { JobHeaderPayload, JobPage, OperationRow } from "@/types/po";
 
 interface JobDraft {
@@ -68,15 +69,6 @@ function draftToPayload(draft: JobDraft): JobHeaderPayload {
   };
 }
 
-function lineTotal(draft: JobDraft): string {
-  const price = Number(parseMoney(draft.unit_price) ?? "");
-  if (!Number.isFinite(price)) return "";
-  if (draft.unit === "Lot") return formatUsd(price);
-  const qty = Number(draft.quantity);
-  if (!Number.isFinite(qty)) return formatUsd(price);
-  return formatUsd(qty * price);
-}
-
 export function JobPage() {
   const { jobNumber } = useParams<{ jobNumber: string }>();
   const location = useLocation();
@@ -103,6 +95,7 @@ export function JobPage() {
     load().catch((err: Error) => setError(err.message));
   }, [jobNumber]);
 
+  useDocumentTitle(["Job " + (jobNumber || ""), job?.part_number || draft?.part_number]);
   if (!jobNumber) return null;
 
   const backToPo = nav?.from === "po-review";
@@ -181,7 +174,24 @@ export function JobPage() {
             <CardHeader>
               <CardTitle className="flex flex-wrap items-baseline gap-x-8 text-[15px] font-semibold normal-case tracking-normal">
                 <span>Job #{job.job_number}</span>
-                <span>Ship #{job.shipper_number || "—"}</span>
+                <span className="inline-flex items-baseline gap-2">
+                  Ship #{job.shipper_number || "—"}
+                  {job.shipper_number ? (
+                    <ShipperLink
+                      number={job.shipper_number}
+                      state={
+                        nav ?? {
+                          from: "purchase-orders",
+                          customerCode: draft.customer_code,
+                          poNumber: draft.po_number,
+                        }
+                      }
+                      className="text-xs font-semibold"
+                    >
+                      View shipper
+                    </ShipperLink>
+                  ) : null}
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3" data-enter-form onKeyDown={handleEnterAdvance}>
@@ -197,12 +207,30 @@ export function JobPage() {
                     {job.customer_name ? <p className="text-xs text-muted">{job.customer_name}</p> : null}
                   </JobRow>
                   <JobRow label="PO#">
-                    <Input
-                      className="font-mono"
-                      value={draft.po_number}
-                      disabled={busy}
-                      onChange={(event) => setField("po_number", event.target.value)}
-                    />
+                    <div className="flex items-center gap-2">
+                      <Input
+                        className="font-mono"
+                        value={draft.po_number}
+                        disabled={busy}
+                        onChange={(event) => setField("po_number", event.target.value)}
+                      />
+                      {draft.po_number.trim() && draft.customer_code.trim() ? (
+                        <PoLink
+                          customer={draft.customer_code}
+                          po={draft.po_number}
+                          state={
+                            nav ?? {
+                              from: "purchase-orders",
+                              customerCode: draft.customer_code,
+                              poNumber: draft.po_number,
+                            }
+                          }
+                          className="shrink-0 text-xs font-semibold"
+                        >
+                          View PO
+                        </PoLink>
+                      ) : null}
+                    </div>
                   </JobRow>
                   <JobRow label="Line#">
                     <Input
@@ -291,7 +319,7 @@ export function JobPage() {
                       aria-label="Certification required"
                     />
                     <span className="ml-auto shrink-0 text-[13px] text-ink">Total</span>
-                    <Input className="w-28 shrink-0 font-mono" value={lineTotal(draft)} readOnly tabIndex={-1} data-enter-skip />
+                    <Input className="w-28 shrink-0 font-mono" value={lineTotal(draft.quantity, draft.unit, draft.unit_price)} readOnly tabIndex={-1} data-enter-skip />
                   </div>
                   <p className="text-xs text-muted">
                     {job.cert_linked ? "Certificate is linked on the part." : "No certificate linked on the part."}{" "}

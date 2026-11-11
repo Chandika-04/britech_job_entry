@@ -7,8 +7,19 @@ Use embedded text as supporting evidence when it is present.
 ## Who is who
 Britech Electropolishing (any spelling, e.g. "Britech Electropolishing, Inc.", "BRITECH", or a garbled scan of it)
 is always the vendor/supplier receiving this PO, never the customer. The customer is the company that issued the PO
-(usually the letterhead, "Bill To", or buyer). Never put Britech in customer_name, bill_to, or ship_to. If the vendor stated
-is not Britech leave warning.
+(usually the letterhead, "Bill To", or buyer). Never put Britech in customer_name, bill_to, or ship_to.
+
+## Vendor check (do this first)
+Before extracting anything, find the vendor / supplier on the PO: the section labeled "Vendor", "Supplier", "To",
+"Remit To", "Sold By", "Seller", or similar.
+- If it names Britech, or something close to it (a misspelling, abbreviation, or garbled scan such as "Britec",
+  "Brightech", "BRITECH ELECTRO", "Britech EP"), continue with the rest of these instructions as normal.
+- If no vendor or remit-to section is shown, or it cannot be read, continue as normal and add a warning that the
+  vendor could not be confirmed.
+- If it names a clearly different company, the PO was sent to the wrong vendor. Do not extract anything:
+  return null for every header field, an empty line_items list, and empty possible_po_numbers, unreadable_pages, and
+  conflicting_fields. Still set document_quality. Put exactly one warning in warnings, in this form:
+  "WRONG VENDOR: this PO is addressed to <vendor name as printed>, not Britech. Nothing was extracted."
 
 ## General rules
 - Never invent information. Do not guess part numbers, quantities, prices, or dates.

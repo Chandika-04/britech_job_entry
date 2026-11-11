@@ -1,15 +1,27 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Printer } from "lucide-react";
 
 import { api } from "@/api/client";
+import { PrintShipperDialog } from "@/components/po/PrintShipperDialog";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDate } from "@/lib/utils";
 import type { JobNavState } from "@/lib/jobNav";
+import { PoLink, PoNumberLinks, poSummaryPath } from "@/lib/poSummary";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
+import { formatDate } from "@/lib/utils";
 import type { ShopKeeperShipperPage } from "@/types/po";
 
-function poLabel(poNumber: string): string {
-  return poNumber.trim() ? poNumber : "(no PO number)";
+function shipperBack(nav: JobNavState | null): { to: string; label: string } {
+  if (nav?.from === "po-review" && nav.poId != null) return { to: `/po/${nav.poId}`, label: "Back to PO" };
+  if (nav?.from === "purchase-orders") {
+    return { to: `/purchase-orders${nav.listSearch ?? ""}`, label: "Back to ShopKeeper jobs" };
+  }
+  if (nav?.from === "po-summary" && nav.customerCode) {
+    return { to: poSummaryPath(nav.customerCode, nav.poNumber ?? ""), label: "Back to this PO" };
+  }
+  if (nav?.from === "work-list") return { to: `/${(nav.listSearch ?? "").replace(/^\//, "")}`, label: "Back to Work list" };
+  return { to: `/shippers${nav?.listSearch ?? ""}`, label: "Back to Shippers" };
 }
 
 export function ShipperPage() {
@@ -18,8 +30,10 @@ export function ShipperPage() {
   const nav = (location.state as JobNavState | null) || null;
   const [shipper, setShipper] = useState<ShopKeeperShipperPage | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
+  useDocumentTitle([shipNumber ? `Shipper ${shipNumber}` : "Shipper"]);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!shipNumber) return;
     api
       .getShipper(shipNumber)
@@ -30,31 +44,56 @@ export function ShipperPage() {
       .catch((err: Error) => setError(err.message));
   }, [shipNumber]);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   if (!shipNumber) return null;
 
-  const backToPo = nav?.from === "po-review" && nav.poId != null;
-  const backTo = backToPo ? `/po/${nav.poId}` : `/shippers${nav?.listSearch ?? ""}`;
+  const back = shipperBack(nav);
   const status = shipper?.invoiced ? "I" : shipper?.status || "—";
+  const poNav: JobNavState = {
+    from: "shippers",
+    shipNumber: shipper?.shipper_number ?? shipNumber,
+    listSearch: nav?.listSearch,
+  };
 
   return (
     <div className="space-y-4">
-      <Link to={backTo} className="inline-flex items-center gap-1 text-sm text-muted hover:text-accent">
+      <Link to={back.to} className="inline-flex items-center gap-1 text-sm text-muted hover:text-accent">
         <ArrowLeft className="h-4 w-4" />
-        {backToPo ? "Back to PO" : "Back to Shippers"}
+        {back.label}
       </Link>
       {error ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p> : null}
       {shipper ? (
         <Card>
           <CardHeader>
-            <CardTitle className="flex flex-wrap items-baseline gap-x-8 text-[15px] font-semibold normal-case tracking-normal">
-              <span>Shipper #{shipper.shipper_number}</span>
-              <span>Status {status}</span>
+            <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-[15px] font-semibold normal-case tracking-normal">
+              <span className="flex flex-wrap items-baseline gap-x-8">
+                <span>Shipper #{shipper.shipper_number}</span>
+                <span>Status {status}</span>
+                <span className="text-xs font-normal text-muted">{shipper.printed ? "Printed" : "Not printed yet"}</span>
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant={shipper.printed ? "outline" : "default"}
+                disabled={shipper.job_count === 0}
+                onClick={() => setPrinting(true)}
+              >
+                <Printer className="h-3.5 w-3.5" />
+                Print packing list
+              </Button>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-x-10 gap-y-2 text-sm md:grid-cols-2 lg:grid-cols-3">
               <Info label="Customer" value={shipper.customer_name} />
-              <Info label="PO #" value={shipper.po_numbers} mono />
+              <Info
+                label="PO #"
+                value={<PoNumberLinks customer={shipper.customer_code} poNumbers={shipper.po_numbers} state={poNav} />}
+                mono
+              />
               <Info label="Jobs" value={String(shipper.job_count)} mono />
               <Info label="Ship via" value={shipper.ship_via} />
               <Info label="Prepared by" value={shipper.ship_by} />
@@ -92,7 +131,9 @@ export function ShipperPage() {
                         {job.job_number}
                       </Link>
                     </td>
-                    <td className="font-mono">{poLabel(job.po_number)}</td>
+                    <td className="font-mono">
+                      <PoLink customer={job.customer_code} po={job.po_number} state={poNav} />
+                    </td>
                     <td className="max-w-[240px] truncate">{job.customer_name || job.customer_code || "—"}</td>
                     <td className="font-mono">{job.part_number}</td>
                     <td className="font-mono text-muted">{job.part_revision || "—"}</td>
@@ -112,11 +153,14 @@ export function ShipperPage() {
       ) : !error ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : null}
+      {printing && shipper ? (
+        <PrintShipperDialog shipNumber={shipper.shipper_number} onClose={() => setPrinting(false)} onPrinted={load} />
+      ) : null}
     </div>
   );
 }
 
-function Info({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) {
+function Info({ label, value, mono }: { label: string; value: ReactNode; mono?: boolean }) {
   return (
     <div>
       <div className="text-[13px] text-ink">{label}</div>

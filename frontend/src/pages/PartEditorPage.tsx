@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { pictureFileName } from "@/lib/partPath";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { cn } from "@/lib/utils";
 import type { OperationRow, PartEditor, PartPicture } from "@/types/po";
 
@@ -70,6 +71,7 @@ export function PartEditorPage() {
   const [busy, setBusy] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
+  useDocumentTitle([isNew ? "New part" : partNumber || "Part"]);
 
   const load = async (id = pmLinkId) => {
     if (!id) return;

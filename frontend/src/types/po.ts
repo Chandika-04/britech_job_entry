@@ -4,6 +4,18 @@ export type PoSource = "upload" | "manual";
 export type WarningSeverity = "info" | "warning" | "prominent";
 export type ErpStatus = "pending" | "ready" | "creating" | "created" | "failed" | "skipped";
 
+export type PrintDocKind = "traveler" | "certification" | "shipper";
+
+export interface PrintStatus {
+  enabled: boolean;
+  reason: string | null;
+  documents: Record<PrintDocKind, { printer: string; settings: string; description: string }>;
+}
+
+export interface DirectPrintResult {
+  sent: string[];
+}
+
 export interface WarningItem {
   code: string;
   message: string;
@@ -204,6 +216,8 @@ export interface ShopKeeperJobRow {
   order_date: string | null;
   cert_required: boolean;
   shipper_number: string | null;
+  unit_price?: string | null;
+  unit?: string | null;
 }
 
 export interface ShopKeeperPoListResponse {
@@ -224,15 +238,6 @@ export interface ShopKeeperPoGroupRow {
   order_date: string | null;
 }
 
-export interface ShopKeeperPoGroupListResponse {
-  items: ShopKeeperPoGroupRow[];
-  total: number;
-  page: number;
-  page_size: number;
-  query: string | null;
-  search_by: string;
-}
-
 export interface ShopKeeperPoPage extends ShopKeeperPoGroupRow {
   jobs: ShopKeeperJobRow[];
 }
@@ -248,6 +253,7 @@ export interface ShopKeeperShipperRow {
   job_count: number;
   customer_name: string | null;
   po_numbers: string | null;
+  customer_code: string | null;
 }
 
 export interface ShopKeeperShipperListResponse {
@@ -273,6 +279,7 @@ export interface ShopKeeperShipperPage {
   tracking_number: string | null;
   note: string | null;
   jobs: ShopKeeperJobRow[];
+  customer_code: string | null;
 }
 
 export interface CreatePrintResult {

@@ -87,6 +87,22 @@ def test_conflicting_and_missing_fields(db):
     assert "partial_line_item" in codes
 
 
+def test_wrong_vendor_is_the_only_warning(db):
+    message = "WRONG VENDOR: this PO is addressed to Acme Plating, not Britech. Nothing was extracted."
+    extraction = ExtractionResult(document_quality="good", warnings=[message])
+    warnings = build_warnings(db, extraction)
+    assert [(item.code, item.severity, item.message) for item in warnings] == [
+        ("wrong_vendor", "prominent", message)
+    ]
+
+
+def test_vendor_not_confirmed_stays_a_note(db):
+    extraction = extraction_with(warnings=["The vendor could not be confirmed."])
+    warnings = build_warnings(db, extraction)
+    assert "wrong_vendor" not in {item.code for item in warnings}
+    assert any(item.code == "extraction_note" for item in warnings)
+
+
 def test_pipeline_stores_llm_history(db, settings):
     po = create_from_upload(db, filename="po.pdf", content_type="application/pdf", pdf_bytes=make_text_pdf())
     provider = FakeExtractionProvider()

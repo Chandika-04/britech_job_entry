@@ -2,8 +2,10 @@ import { FileUp, PenLine } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 
 export function NewPoPage() {
+  useDocumentTitle(["New PO"]);
   return (
     <div className="mx-auto max-w-4xl space-y-5 py-8">
       <div>

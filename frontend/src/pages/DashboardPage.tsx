@@ -8,12 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePreparedBy } from "@/components/layout/PreparedBy";
 import { JobsBadge, ReviewBadge, StatusBadge } from "@/components/po/StatusBadge";
+import { hasWrongVendor } from "@/components/po/WarningsBanner";
+import { ShipperLink } from "@/lib/poSummary";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { formatDate } from "@/lib/utils";
 import type { PoListResponse, PoSummary } from "@/types/po";
 
 const LIST_POLL_MS = 5000;
 
 export function DashboardPage() {
+  useDocumentTitle(["Work list"]);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -241,13 +245,19 @@ export function DashboardPage() {
                     </div>
                   </td>
                   <td onClick={(event) => event.stopPropagation()}>
-                    <ShipperCell item={item} shippingId={shippingId} onCreate={createShipper} />
+                    <ShipperCell
+                      item={item}
+                      shippingId={shippingId}
+                      onCreate={createShipper}
+                      listSearch={params.toString() ? `?${params.toString()}` : ""}
+                    />
                   </td>
                   <td>
                     <div className="flex gap-1">
+                      {hasWrongVendor(item.warnings) ? <Badge variant="danger">Wrong vendor</Badge> : null}
                       {item.has_duplicate_warning ? <Badge variant="warning">Duplicate</Badge> : null}
                       {item.is_stale ? <Badge variant="stale">Stuck</Badge> : null}
-                      {item.warnings.length > 0 && !item.has_duplicate_warning ? (
+                      {item.warnings.length > 0 && !item.has_duplicate_warning && !hasWrongVendor(item.warnings) ? (
                         <Badge variant="muted">
                           {item.warnings.length} {item.warnings.length === 1 ? "warning" : "warnings"}
                         </Badge>
@@ -291,17 +301,22 @@ function ShipperCell({
   item,
   shippingId,
   onCreate,
+  listSearch,
 }: {
   item: PoSummary;
   shippingId: number | null;
   onCreate: (event: MouseEvent, item: PoSummary) => void;
+  listSearch: string;
 }) {
+  const shipperLink = item.shipper_number ? (
+    <ShipperLink
+      number={item.shipper_number}
+      state={{ from: "work-list", listSearch }}
+      className="font-mono text-[13px] tabular-nums"
+    />
+  ) : null;
   if (!item.jobs_complete) {
-    return item.shipper_number ? (
-      <span className="font-mono text-[13px] tabular-nums">{item.shipper_number}</span>
-    ) : (
-      <span className="text-faint">—</span>
-    );
+    return shipperLink ?? <span className="text-faint">—</span>;
   }
   if (!item.shipper_number) {
     return (
@@ -318,7 +333,7 @@ function ShipperCell({
   }
   return (
     <div className="flex items-center gap-2">
-      <span className="font-mono text-[13px] tabular-nums">{item.shipper_number}</span>
+      {shipperLink}
       <Button
         type="button"
         size="sm"

@@ -23,13 +23,20 @@ from app.schemas.operations import (
     WorkCenterOut,
 )
 from app.services.po_service import to_detail
-from app.services.print.documents import build_certification_pdf, build_traveler_pdf
+from app.services.print.documents import (
+    DEFAULT_SHIPPER_COPIES,
+    SHIPPER_COPIES,
+    build_certification_pdf,
+    build_shipper_pdf,
+    build_traveler_pdf,
+)
+from app.services.print.printer import DOC_LABELS, describe_settings, print_document
 from app.services.shopkeeper import get_shopkeeper_provider
 from app.services.shopkeeper.ops_util import note_plain_text, note_to_shopkeeper_html, operation_from_payload
 from app.services.shopkeeper.provider import ShopKeeperProvider
 from app.services.shopkeeper.lookup import normalize_part_search_by
-from app.services.shopkeeper.types import CreatePrintResult, JobHeaderUpdate, PartHeaderUpdate
-from app.services.shopkeeper.writer import create_job_for_line
+from app.services.shopkeeper.types import CreatePrintResult, JobHeaderUpdate, PartHeaderUpdate, ShipperPrintData
+from app.services.shopkeeper.writer import create_job_for_line, normalize_prepared_by
 
 
 def create_job_and_print(
@@ -222,15 +229,97 @@ def mark_traveler_printed(
         line.erp_traveler_printed = True
 
 
+def load_shipper_print_data(ship_number: str, provider: ShopKeeperProvider | None = None) -> ShipperPrintData:
+    provider = provider or get_shopkeeper_provider()
+    shipper = provider.get_shipper(ship_number)
+    if shipper is None:
+        raise NotFoundError("Shipper not found.")
+    if not shipper.jobs:
+        raise AppError("This shipper has no jobs to print.", status_code=409)
+    customer = provider.get_customer(shipper.customer_code) if shipper.customer_code else None
+    ship_to = customer
+    if customer is not None:
+        tos = provider.lookup_ship_tos(customer.customer_number)
+        if tos:
+            ship_to = tos[0]
+    return ShipperPrintData(shipper=shipper, customer=customer, ship_to=ship_to)
+
+
+def shipper_pdf(
+    ship_number: str,
+    copies: list[str] | None = None,
+    provider: ShopKeeperProvider | None = None,
+    prepared_by: str | None = None,
+) -> bytes:
+    chosen = [label for label in SHIPPER_COPIES if label in (copies or DEFAULT_SHIPPER_COPIES)]
+    if not chosen:
+        raise AppError("Choose at least one copy to print.", status_code=422)
+    initials = normalize_prepared_by(prepared_by)
+    data = load_shipper_print_data(ship_number, provider)
+    data.prepared_by = initials
+    try:
+        return build_shipper_pdf(data, chosen)
+    except Exception as exc:
+        raise AppError(str(exc), status_code=502) from exc
+
+
+def mark_shipper_printed(ship_number: str, provider: ShopKeeperProvider | None = None) -> None:
+    provider = provider or get_shopkeeper_provider()
+    provider.mark_shipper_printed(ship_number)
+
+
+def _sent(kind: str, target) -> str:
+    return f"{DOC_LABELS[kind]} sent to {target.printer} ({describe_settings(target.settings)})."
+
+
 def print_job(
     db: Session,
     job_number: str,
     provider: ShopKeeperProvider | None = None,
-) -> bytes:
+    *,
+    traveler: bool = True,
+    certification: bool = False,
+) -> list[str]:
+    """Print a job's traveler and/or cert straight to the shop printer (no browser dialog).
+
+    The traveler uses TRAVELER_PRINT_SETTINGS (front and back by default); the cert uses
+    CERT_PRINT_SETTINGS (one side). Marks the traveler printed (steps 10-11) after it is sent.
+    """
     provider = provider or get_shopkeeper_provider()
-    pdf = traveler_pdf(job_number, provider)
-    mark_traveler_printed(db, job_number, provider)
-    return pdf
+    if not traveler and not certification:
+        raise AppError("Choose the traveler, the certification, or both.", status_code=422)
+    job = _job_ready_to_print(job_number, provider)
+    if certification and not job.cert_required:
+        raise AppError("Certification is not required for this job.", status_code=409)
+    sent: list[str] = []
+    if traveler:
+        pdf = _build_print_pdf(job_number, build_traveler_pdf, provider)
+        sent.append(_sent("traveler", print_document("traveler", pdf, f"traveler {job_number}")))
+        try:
+            mark_traveler_printed(db, job_number, provider)
+        except AppError as exc:
+            raise AppError(f"{sent[-1]} ShopKeeper was not marked printed: {exc.message}", status_code=exc.status_code) from exc
+    if certification:
+        pdf = _build_print_pdf(job_number, build_certification_pdf, provider)
+        sent.append(_sent("certification", print_document("certification", pdf, f"certification {job_number}")))
+    return sent
+
+
+def print_shipper(
+    ship_number: str,
+    copies: list[str] | None = None,
+    prepared_by: str | None = None,
+    provider: ShopKeeperProvider | None = None,
+) -> list[str]:
+    """Print the SK055 packing list straight to the shop printer, then set Jsm_ShipperPrinted."""
+    provider = provider or get_shopkeeper_provider()
+    pdf = shipper_pdf(ship_number, copies, provider, prepared_by=prepared_by)
+    sent = _sent("shipper", print_document("shipper", pdf, f"shipper {ship_number}"))
+    try:
+        mark_shipper_printed(ship_number, provider)
+    except AppError as exc:
+        raise AppError(f"{sent} ShopKeeper was not marked printed: {exc.message}", status_code=exc.status_code) from exc
+    return [sent]
 
 
 def get_part_editor(pm_linkid: int, provider: ShopKeeperProvider | None = None) -> PartEditorOut:
@@ -264,11 +353,22 @@ def list_parts(
     search_by: str,
     page: int,
     page_size: int,
+    part: str | None = None,
+    customer: str | None = None,
+    description: str | None = None,
     provider: ShopKeeperProvider | None = None,
 ) -> PartListResponse:
     provider = provider or get_shopkeeper_provider()
     field = normalize_part_search_by(search_by)
-    rows, total = provider.list_parts(query=query, search_by=field, page=page, page_size=page_size)
+    rows, total = provider.list_parts(
+        query=query,
+        search_by=field,
+        page=page,
+        page_size=page_size,
+        part=part,
+        customer=customer,
+        description=description,
+    )
     return PartListResponse(
         items=[PartListRowOut.model_validate(row, from_attributes=True) for row in rows],
         total=total,

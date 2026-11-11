@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from app.exceptions import AppError, ConflictError
-from app.services.shopkeeper.lookup import normalize_part_search_by
+from app.services.shopkeeper.lookup import normalize_part_search_by, ready_term
 from app.services.shopkeeper.ops_util import rowversion_bytes, rowversion_hex
 from app.services.shopkeeper.types import (
     CertText,
@@ -108,6 +108,57 @@ def _row_to_op(row) -> OperationRow:
         om_link=_as_int(row[13]),
         rowversion=rowversion_hex(row[14]),
     )
+
+
+def _like(value: str) -> str:
+    return f"%{value}%"
+
+
+def _add_part_field(clauses: list[str], params: list[object], field: str, term: str) -> None:
+    like = _like(term)
+    if field == "customer":
+        clauses.append(
+            """
+            AND (
+                p.Pm_CustCode LIKE ?
+                OR EXISTS (
+                    SELECT 1
+                    FROM dbo.Customers c
+                    WHERE c.[Customer Number] = p.Pm_CustCode
+                      AND c.Company LIKE ?
+                )
+            )
+            """
+        )
+        params.extend([like, like])
+    elif field == "description":
+        clauses.append("AND p.Pm_PartDesc LIKE ?")
+        params.append(like)
+    else:
+        clauses.append("AND p.Pm_PartNum LIKE ?")
+        params.append(like)
+
+
+def _part_search_clause(
+    query: str | None,
+    search_by: str,
+    *,
+    part: str | None = None,
+    customer: str | None = None,
+    description: str | None = None,
+) -> tuple[str, list[object]]:
+    clauses: list[str] = []
+    params: list[object] = []
+    field = normalize_part_search_by(search_by)
+    if term := ready_term(query):
+        _add_part_field(clauses, params, field, term)
+    if term := ready_term(part):
+        _add_part_field(clauses, params, "part", term)
+    if term := ready_term(customer):
+        _add_part_field(clauses, params, "customer", term)
+    if term := ready_term(description):
+        _add_part_field(clauses, params, "description", term)
+    return (" ".join(clauses), params) if clauses else ("", [])
 
 
 class SqlServerOpsMixin:
@@ -661,33 +712,14 @@ class SqlServerOpsMixin:
         search_by: str = "part",
         page: int = 1,
         page_size: int = 20,
+        part: str | None = None,
+        customer: str | None = None,
+        description: str | None = None,
     ) -> tuple[list[PartMasterListRow], int]:
-        q = (query or "").strip()
-        field = normalize_part_search_by(search_by)
-        like = f"%{q}%"
         offset = max(0, (page - 1) * page_size)
-        search_params: list[object] = []
-        search_sql = ""
-        if q:
-            if field == "customer":
-                search_sql = """
-                    AND (
-                        p.Pm_CustCode LIKE ?
-                        OR EXISTS (
-                            SELECT 1
-                            FROM dbo.Customers c
-                            WHERE c.[Customer Number] = p.Pm_CustCode
-                              AND c.Company LIKE ?
-                        )
-                    )
-                """
-                search_params.extend([like, like])
-            elif field == "description":
-                search_sql = "AND p.Pm_PartDesc LIKE ?"
-                search_params.append(like)
-            else:
-                search_sql = "AND p.Pm_PartNum LIKE ?"
-                search_params.append(like)
+        search_sql, search_params = _part_search_clause(
+            query, search_by, part=part, customer=customer, description=description
+        )
         conn, _ = self._connect()
         try:
             cur = conn.cursor()

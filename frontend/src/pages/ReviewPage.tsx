@@ -14,6 +14,10 @@ import { ReviewBadge, StatusBadge } from "@/components/po/StatusBadge";
 import { ShipperCreatedBanner, WarningsBanner } from "@/components/po/WarningsBanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CopyPoSummaryButton } from "@/components/po/CopyPoSummaryButton";
+import { ShipperActions } from "@/components/po/ShipperActions";
+import { rowsFromDraft } from "@/lib/copyPoSummary";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { cn, formatQty, formatUsd, handleEnterAdvance } from "@/lib/utils";
 import type { CreatePrintResult, LineItemDraft, PartCandidate, PoDetail, PoDraft } from "@/types/po";
 
@@ -410,6 +414,8 @@ export function ReviewPage() {
     return "All changes saved";
   }, [needsReconfirm, pending]);
 
+  useDocumentTitle([po?.po_number ? `PO ${po.po_number}` : "PO", po?.customer_name]);
+
   if (error && !po) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
@@ -445,6 +451,8 @@ export function ReviewPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          <ShipperActions po={po} disabled={busy} onChangePo={setPo} onError={setError} onNotice={setNotice} />
+          {draft ? <CopyPoSummaryButton rows={rowsFromDraft(draft.line_items)} /> : null}
           <StatusBadge status={po.status} source={po.source} />
           <ReviewBadge state={po.review_state} />
           <span className="ml-1 font-mono text-xs text-muted tabular-nums">

@@ -6,27 +6,34 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+function formatMdY(year: number, month: number, day: number): string {
+  return `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}/${String(year).slice(-2)}`;
+}
+
+function formatMdYFromIso(value: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return null;
+  return `${match[2]}/${match[3]}/${match[1].slice(2)}`;
+}
+
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  const hour24 = date.getHours();
+  const hour12 = hour24 % 12 || 12;
+  const ampm = hour24 >= 12 ? "PM" : "AM";
+  return `${formatMdY(date.getFullYear(), date.getMonth() + 1, date.getDate())} ${hour12}:${String(date.getMinutes()).padStart(2, "0")} ${ampm}`;
 }
 
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const [year, month, day] = value.split("-").map(Number);
-    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(year, month - 1, day));
+    return formatMdYFromIso(value) ?? value;
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-  }).format(date);
+  return formatMdY(date.getFullYear(), date.getMonth() + 1, date.getDate());
 }
 
 export function emptyToNull(value: string): string | null {
@@ -62,9 +69,7 @@ export function formatQty(value: string | number | null | undefined): string {
 export function formatDueDisplay(value: string | null | undefined): string {
   const iso = (value || "").trim();
   if (!iso) return "";
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  if (!match) return iso;
-  return `${match[2]}/${match[3]}/${match[1].slice(2)}`;
+  return formatMdYFromIso(iso) ?? iso;
 }
 
 export function parseDueInput(value: string): string | null {
@@ -104,6 +109,20 @@ export function formatUsd(value: string | number | null | undefined): string {
   const parsed = parseMoney(text);
   if (parsed == null) return text;
   return USD.format(Number(parsed));
+}
+
+export function lineTotal(
+  quantity: string | number | null | undefined,
+  unit: string | null | undefined,
+  unitPrice: string | number | null | undefined,
+): string {
+  const price = Number(parseMoney(unitPrice) ?? "");
+  if (!Number.isFinite(price)) return "";
+  if ((unit || "").trim().toLowerCase() === "lot") return formatUsd(price);
+  const raw = String(quantity ?? "").trim();
+  const qty = Number(raw);
+  if (!raw || !Number.isFinite(qty)) return formatUsd(price);
+  return formatUsd(qty * price);
 }
 
 function isFocusField(el: Element): el is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {

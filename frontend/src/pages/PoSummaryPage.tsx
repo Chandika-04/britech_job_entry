@@ -3,9 +3,12 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 
 import { api } from "@/api/client";
+import { CopyPoSummaryButton } from "@/components/po/CopyPoSummaryButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { rowsFromJobs, sortJobsByLine } from "@/lib/copyPoSummary";
 import type { JobNavState } from "@/lib/jobNav";
-import { poLabel, splitShipperNumbers } from "@/lib/poSummary";
+import { poLabel, ShipperLink, splitShipperNumbers } from "@/lib/poSummary";
+import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { formatDate } from "@/lib/utils";
 import type { ShopKeeperPoPage } from "@/types/po";
 
@@ -17,6 +20,7 @@ export function PoSummaryPage() {
   const poNumber = (params.get("po") ?? "").trim();
   const [page, setPage] = useState<ShopKeeperPoPage | null>(null);
   const [error, setError] = useState<string | null>(null);
+  useDocumentTitle([`PO ${poLabel(poNumber)} summary`]);
 
   useEffect(() => {
     if (!customerCode) {
@@ -36,22 +40,48 @@ export function PoSummaryPage() {
       });
   }, [customerCode, poNumber]);
 
-  const backTo = `/purchase-orders${nav?.listSearch ?? ""}`;
+  const backTo =
+    nav?.from === "shippers"
+      ? `/shippers${nav.listSearch ?? ""}`
+      : nav?.from === "po-review" && nav.poId != null
+        ? `/po/${nav.poId}`
+        : nav?.from === "work-list"
+          ? `/${(nav.listSearch ?? "").replace(/^\//, "")}`
+          : `/purchase-orders${nav?.listSearch ?? ""}`;
+  const backLabel =
+    nav?.from === "shippers"
+      ? "Back to Shippers"
+      : nav?.from === "po-review"
+        ? "Back to PO"
+        : nav?.from === "work-list"
+          ? "Back to Work list"
+          : "Back to ShopKeeper jobs";
   const shippers = splitShipperNumbers(page?.shipper_numbers);
+  const shipNav: JobNavState = {
+    from: "po-summary",
+    customerCode: page?.customer_code ?? customerCode,
+    poNumber: page?.po_number ?? poNumber,
+    listSearch: nav?.listSearch,
+  };
+  const jobs = sortJobsByLine(page?.jobs ?? []);
+  const copyRows = rowsFromJobs(jobs);
 
   return (
     <div className="space-y-4">
       <Link to={backTo} className="inline-flex items-center gap-1 text-sm text-muted hover:text-accent">
         <ArrowLeft className="h-4 w-4" />
-        Back to ShopKeeper jobs
+        {backLabel}
       </Link>
       {error ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p> : null}
       {page ? (
         <Card>
           <CardHeader>
-            <CardTitle className="flex flex-wrap items-baseline gap-x-8 text-[15px] font-semibold normal-case tracking-normal">
-              <span>PO {poLabel(page.po_number)}</span>
-              <span>{page.customer_name || page.customer_code}</span>
+            <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-[15px] font-semibold normal-case tracking-normal">
+              <span className="flex flex-wrap items-baseline gap-x-8">
+                <span>PO {poLabel(page.po_number)}</span>
+                <span>{page.customer_name || page.customer_code}</span>
+              </span>
+              <CopyPoSummaryButton rows={copyRows} />
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -68,9 +98,7 @@ export function PoSummaryPage() {
                     ? shippers.map((shipNumber, index) => (
                         <span key={shipNumber}>
                           {index > 0 ? ", " : null}
-                          <Link className="text-accent hover:underline" to={`/shippers/${encodeURIComponent(shipNumber)}`}>
-                            {shipNumber}
-                          </Link>
+                          <ShipperLink number={shipNumber} state={shipNav} />
                         </span>
                       ))
                     : "—"}
@@ -80,6 +108,7 @@ export function PoSummaryPage() {
             <table className="data-table">
               <thead>
                 <tr>
+                  <th className="num">Line</th>
                   <th>Job #</th>
                   <th>PO #</th>
                   <th>Customer</th>
@@ -93,8 +122,9 @@ export function PoSummaryPage() {
                 </tr>
               </thead>
               <tbody>
-                {page.jobs.map((job) => (
+                {jobs.map((job) => (
                   <tr key={job.job_number}>
+                    <td className="num font-mono tabular-nums">{job.po_line?.trim() || "—"}</td>
                     <td className="font-mono font-medium tabular-nums">
                       <Link
                         className="text-accent hover:underline"
@@ -117,13 +147,7 @@ export function PoSummaryPage() {
                     <td className="num font-mono tabular-nums">{job.quantity ?? "—"}</td>
                     <td>{job.status || "—"}</td>
                     <td className="font-mono tabular-nums">
-                      {job.shipper_number ? (
-                        <Link className="text-accent hover:underline" to={`/shippers/${encodeURIComponent(job.shipper_number)}`}>
-                          {job.shipper_number}
-                        </Link>
-                      ) : (
-                        "—"
-                      )}
+                      <ShipperLink number={job.shipper_number} state={shipNav} />
                     </td>
                     <td className="whitespace-nowrap font-mono text-muted tabular-nums">{formatDate(job.order_date)}</td>
                   </tr>

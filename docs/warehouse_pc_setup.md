@@ -107,7 +107,7 @@ EXTRACTION_PROVIDER=claude
 SHOPKEEPER_PROVIDER=shopkeeper
 SHOPKEEPER_CONNECTION_STRING=<same value as on the development PC>
 SHOPKEEPER_EXPECTED_DATABASE=SkData_Test
-WAREHOUSE_PRINTER_NAME=
+WAREHOUSE_PRINTER_NAME=<printer name, see step 12>
 PART_PHOTOS_DIR=\\DISKSTATION\PartPhotos
 
 CORS_ORIGINS=
@@ -120,7 +120,7 @@ Notes:
   from File Explorer's address bar), or leave it blank to skip the backup copy for now.
 - In `SHOPKEEPER_CONNECTION_STRING`, the driver must be one installed on this PC:
   `DRIVER={ODBC Driver 17 for SQL Server}`.
-- `WAREHOUSE_PRINTER_NAME` is unused. Traveler and certification print use the browser print dialog so you can choose a printer.
+- `WAREHOUSE_PRINTER_NAME` turns on direct printing (step 12). Leave it blank to keep using the browser print box.
 - `PART_PHOTOS_DIR` is the PartPhotos share. Linking a picture on the part editor uses a file already in that folder; it does not copy or rename it.
 - This file holds secrets. It is ignored by git; never commit or share it.
 
@@ -191,6 +191,51 @@ Test it without rebooting: `Start-ScheduledTask "Britech Job Entry"`, then repea
 
 Settings > System > Power & battery > Screen and sleep: set **"When plugged in, put my
 device to sleep after"** to **Never**. The screen may still turn off.
+
+## 12. Direct printing (no print box)
+
+With this set up, **Print** in the app sends travelers, certs, and packing lists straight to
+the shop printer from this PC: travelers front and back, certs and packing lists one side.
+It works the same from a phone or from outside the shop, and always prints on this printer.
+
+1. Install SumatraPDF while signed in as the user the scheduled task runs as:
+
+   ```powershell
+   winget install SumatraPDF.SumatraPDF
+   ```
+
+2. Find the printer's exact name, as that same user:
+
+   ```powershell
+   Get-Printer | Select-Object Name, Type, DriverName
+   ```
+
+3. In `.env`, set `WAREHOUSE_PRINTER_NAME` to that name, for example
+   `WAREHOUSE_PRINTER_NAME=HP LaserJet M404`. The defaults already print travelers
+   `duplexlong` (front and back) and certs and packing lists `simplex` (one side).
+4. Restart the app (`stop_server.ps1`, then `Start-ScheduledTask "Britech Job Entry"`), print one
+   traveler and one packing list, and check the sides.
+
+If the printer ignores the front-and-back setting (some drivers do), add the printer a second
+time in Windows instead: Settings > Bluetooth & devices > Printers & scanners > Add device >
+"Add manually", same printer and driver, named for example **Shop Printer - Duplex**. Open its
+**Printing preferences** and set **Print on both sides** (flip on long edge). Keep the original
+set to one side. Then in `.env`:
+
+```text
+WAREHOUSE_PRINTER_NAME=Shop Printer
+TRAVELER_PRINTER_NAME=Shop Printer - Duplex
+```
+
+Notes:
+
+- The app runs from the scheduled task even when nobody is signed in, so the printer must be
+  installed for that Windows user (step 2 lists what it can see). A printer shared from another
+  PC may not show up when nobody is signed in; a printer added by its own IP address does.
+- Copies or a paper tray can be added to the settings, e.g. `SHIPPER_PRINT_SETTINGS=simplex,2x`
+  or `CERT_PRINT_SETTINGS=simplex,bin=2`.
+- **Print preview** in the app still opens the PDF in the browser, and leaving
+  `WAREHOUSE_PRINTER_NAME` blank goes back to the browser print box.
 
 ---
 

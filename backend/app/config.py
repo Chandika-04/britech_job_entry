@@ -54,7 +54,20 @@ class Settings(BaseSettings):
     shopkeeper_non_tax_code: str = "NT"
     shopkeeper_new_job_status: str = "NA"
     shopkeeper_job_reserve_retries: int = 5
+    # Direct printing from the server (SumatraPDF). Blank printer name = off; the browser
+    # print dialog is used instead. Per-document printer names override the warehouse one,
+    # e.g. a second Windows queue for the same printer that defaults to 1-sided.
     warehouse_printer_name: str = ""
+    traveler_printer_name: str = ""
+    cert_printer_name: str = ""
+    shipper_printer_name: str = ""
+    # SumatraPDF -print-settings, e.g. "duplexlong", "simplex", "simplex,2x", "duplexlong,bin=2".
+    traveler_print_settings: str = "duplexlong"
+    cert_print_settings: str = "simplex"
+    shipper_print_settings: str = "simplex"
+    # Blank = look in the usual install folders.
+    sumatra_pdf_path: str = ""
+    print_timeout_seconds: int = 120
     part_photos_dir: str = r"\\DISKSTATION\PartPhotos"
     app_version: str = "0.2.0"
 

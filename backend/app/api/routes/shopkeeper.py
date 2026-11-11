@@ -17,8 +17,6 @@ from app.schemas.shopkeeper import (
     ResolvePartIn,
     SetCertRequiredIn,
     ShopKeeperJobOut,
-    ShopKeeperPoGroupListResponse,
-    ShopKeeperPoGroupOut,
     ShopKeeperPoListResponse,
     ShopKeeperPoPageOut,
     ShopKeeperShipperListResponse,
@@ -62,34 +60,27 @@ def shopkeeper_status() -> dict:
 def shopkeeper_purchase_orders(
     q: str | None = Query(None),
     search_by: str = Query("po"),
+    po: str | None = Query(None),
+    job: str | None = Query(None),
+    part: str | None = Query(None),
+    customer: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(300, ge=1, le=300),  # job list page size
 ) -> ShopKeeperPoListResponse:
     field = normalize_search_by(search_by)
     provider = get_shopkeeper_provider()
-    jobs, total = provider.list_purchase_orders(query=q, search_by=field, page=page, page_size=page_size)
-    return ShopKeeperPoListResponse(
-        items=[ShopKeeperJobOut.model_validate(job, from_attributes=True) for job in jobs],
-        total=total,
-        page=page,
-        page_size=page_size,
+    jobs, total = provider.list_purchase_orders(
         query=q,
         search_by=field,
+        page=page,
+        page_size=page_size,
+        po=po,
+        job=job,
+        part=part,
+        customer=customer,
     )
-
-
-@router.get("/shopkeeper/purchase-order-groups", response_model=ShopKeeperPoGroupListResponse)
-def shopkeeper_po_groups(
-    q: str | None = Query(None),
-    search_by: str = Query("po"),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(300, ge=1, le=300),
-) -> ShopKeeperPoGroupListResponse:
-    field = normalize_search_by(search_by)
-    provider = get_shopkeeper_provider()
-    rows, total = provider.list_po_groups(query=q, search_by=field, page=page, page_size=page_size)
-    return ShopKeeperPoGroupListResponse(
-        items=[ShopKeeperPoGroupOut.model_validate(row, from_attributes=True) for row in rows],
+    return ShopKeeperPoListResponse(
+        items=[ShopKeeperJobOut.model_validate(job, from_attributes=True) for job in jobs],
         total=total,
         page=page,
         page_size=page_size,
@@ -113,12 +104,25 @@ def shopkeeper_po_detail(
 def shopkeeper_shippers(
     q: str | None = Query(None),
     search_by: str = Query("shipper"),
+    shipper: str | None = Query(None),
+    po: str | None = Query(None),
+    job: str | None = Query(None),
+    customer: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(300, ge=1, le=300),
 ) -> ShopKeeperShipperListResponse:
     field = normalize_shipper_search_by(search_by)
     provider = get_shopkeeper_provider()
-    rows, total = provider.list_shippers(query=q, search_by=field, page=page, page_size=page_size)
+    rows, total = provider.list_shippers(
+        query=q,
+        search_by=field,
+        page=page,
+        page_size=page_size,
+        shipper=shipper,
+        po=po,
+        job=job,
+        customer=customer,
+    )
     return ShopKeeperShipperListResponse(
         items=[ShopKeeperShipperOut.model_validate(row, from_attributes=True) for row in rows],
         total=total,
