@@ -872,6 +872,25 @@ def test_shipper_print_uses_prepared_by_initials(client):
     assert client.get(url, params={"prepared_by": "C R!"}).status_code >= 400
 
 
+def test_multi_page_shipper_has_signature_lines_on_every_page(client):
+    from dataclasses import replace
+
+    fake = FakeShopKeeper.reset_shared()
+    first = next(row for row in fake.job_records if row.shipper_number == "S000012")
+    fake.job_records.extend(
+        replace(first, job_number=f"1993{i:02d}", po_line=str(i + 2)) for i in range(10)
+    )
+    fake.shipper_meta["S000012"]["note"] = "Handle with care"
+    pages = _pdf_pages(
+        client.get("/api/shopkeeper/shippers/S000012/print", params={"copies": ["Customer Copy"]}).content
+    )
+    assert len(pages) == 2
+    for page in pages:
+        assert "Received by:" in page
+        assert "Comments:" in page
+        assert "Handle with care" in page
+
+
 def test_shipper_print_unknown_shipper_is_404(client):
     FakeShopKeeper.reset_shared()
     assert client.get("/api/shopkeeper/shippers/NOPE/print").status_code == 404

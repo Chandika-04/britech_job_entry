@@ -655,26 +655,26 @@ def _draw_shipper_table(page: fitz.Page, jobs: list) -> None:
 
 
 def _draw_shipper_footer(page: fitz.Page, data: ShipperPrintData, copy_label: str, page_no: int, page_count: int, stamp: str) -> None:
-    last = page_no == page_count
-    if last:
-        _fill(page, fitz.Rect(49, 514, 80, 524), LIGHT_GRAY)
-        _put(page, (51, 521.5), "Comments:", 5.4, face="arial")
-        comments = fitz.Rect(82, 513, 551, 601)
-        _box(page, comments, 0.9)
-        note = note_plain_text(data.shipper.note) or ""
-        if note:
-            page.insert_textbox(
-                fitz.Rect(comments.x0 + 4, comments.y0 + 4, comments.x1 - 4, comments.y1 - 4),
-                note,
-                fontsize=9,
-                color=BLACK,
-                **_font_args("arial"),
-            )
-        _put(page, (45, 692), "Shipped by:  /  Received by:", 9, face="arial")
-        _put(page, (312, 692), "Date:", 9, face="arial")
-        # Signature lines sit well below the labels to leave room to sign.
-        _line(page, 45, 726, 290, 726, 0.8)
-        _line(page, 312, 726, 413, 726, 0.8)
+    # Comments and signature lines go on every page, so a multi-page shipper can be
+    # signed on page 1 without flipping to the last page.
+    _fill(page, fitz.Rect(49, 514, 80, 524), LIGHT_GRAY)
+    _put(page, (51, 521.5), "Comments:", 5.4, face="arial")
+    comments = fitz.Rect(82, 513, 551, 601)
+    _box(page, comments, 0.9)
+    note = note_plain_text(data.shipper.note) or ""
+    if note:
+        page.insert_textbox(
+            fitz.Rect(comments.x0 + 4, comments.y0 + 4, comments.x1 - 4, comments.y1 - 4),
+            note,
+            fontsize=9,
+            color=BLACK,
+            **_font_args("arial"),
+        )
+    _put(page, (45, 692), "Shipped by:  /  Received by:", 9, face="arial")
+    _put(page, (312, 692), "Date:", 9, face="arial")
+    # Signature lines sit well below the labels to leave room to sign.
+    _line(page, 45, 726, 290, 726, 0.8)
+    _line(page, 312, 726, 413, 726, 0.8)
     _put(page, (32, 738), stamp, 7, face="arial")
     prepared = _text(data.prepared_by) or _text(data.shipper.ship_by)
     _put(page, (21, 746), f"Prepared By:  {prepared}" if prepared else "Prepared By:", 7, face="arial")
