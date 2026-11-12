@@ -194,6 +194,8 @@ export interface PriceQuote {
   po_number: string | null;
   order_date: string | null;
   note: string | null;
+  /** Price-matrix rows only: when the break expires (null = never). */
+  expires?: string | null;
 }
 
 export interface PriceLookupResponse {

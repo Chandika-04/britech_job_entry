@@ -851,6 +851,7 @@ class FakeShopKeeper:
                             unit_price=best["price"],
                             quantity=best["qty"],
                             note=f"Qty break {best['qty']}",
+                            expires=best.get("expires"),
                         )
                     )
             else:
@@ -861,6 +862,7 @@ class FakeShopKeeper:
                             unit_price=row["price"],
                             quantity=row["qty"],
                             note=f"Qty break {row['qty']}",
+                            expires=row.get("expires"),
                         )
                     )
         key = f"{customer_number} {part_number} {part_revision}"

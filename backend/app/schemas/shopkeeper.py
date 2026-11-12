@@ -65,6 +65,7 @@ class PriceQuoteOut(BaseModel):
     po_number: str | None = None
     order_date: date | None = None
     note: str | None = None
+    expires: date | None = None
 
 
 class PriceLookupResponse(BaseModel):

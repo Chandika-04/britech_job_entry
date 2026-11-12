@@ -23,7 +23,9 @@ function wholeQty(value: string): number | null {
 }
 
 export function describeSuggestion(quote: PriceQuote): string {
-  if (quote.source === "matrix") return `price matrix, qty ${quote.quantity ?? "?"} break`;
+  if (quote.source === "matrix") {
+    return quote.expires ? `price matrix, expires ${formatDate(quote.expires)}` : "price matrix, no expiry";
+  }
   const when = quote.order_date ? ` (${formatDate(quote.order_date)})` : "";
   return `last price used, job ${quote.job_number ?? "?"}${when}`;
 }

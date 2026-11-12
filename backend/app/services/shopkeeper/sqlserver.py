@@ -1253,10 +1253,15 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
             ).fetchone()
             if part_row:
                 breaks = [
-                    (int(row[0]) if row[0] is not None else 0, _as_money(row[1]), _as_optional_str(row[2]))
+                    (
+                        int(row[0]) if row[0] is not None else 0,
+                        _as_money(row[1]),
+                        _as_optional_str(row[2]),
+                        _as_date(row[3]),
+                    )
                     for row in cur.execute(
                         """
-                        SELECT Pmpm_Qty, Pmpm_Price, Pmpm_Note
+                        SELECT Pmpm_Qty, Pmpm_Price, Pmpm_Note, Pmpm_ExpirationDate
                         FROM dbo.PartMasterPriceMatrix
                         WHERE Pmpm_LinkID = ?
                           AND Pmpm_Price IS NOT NULL
@@ -1271,23 +1276,25 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
                 if quantity is not None:
                     chosen = pick_matrix_break(breaks, quantity)
                     if chosen:
-                        qty, price, note = chosen
+                        qty, price, note, expires = chosen
                         quotes.append(
                             PriceQuote(
                                 source="matrix",
                                 unit_price=price,
                                 quantity=qty,
                                 note=note or f"Qty break {qty}",
+                                expires=expires,
                             )
                         )
                 else:
-                    for qty, price, note in breaks:
+                    for qty, price, note, expires in breaks:
                         quotes.append(
                             PriceQuote(
                                 source="matrix",
                                 unit_price=price,
                                 quantity=qty,
                                 note=note or f"Qty break {qty}",
+                                expires=expires,
                             )
                         )
 

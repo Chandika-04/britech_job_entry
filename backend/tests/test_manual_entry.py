@@ -108,6 +108,19 @@ def test_manual_api_create_with_draft(client):
     assert listed["items"][0]["po_number"] == "M-SAVE"
 
 
+def test_matrix_price_carries_its_expiry_date(client):
+    fake = FakeShopKeeper.reset_shared()
+    expires = date.today().replace(year=date.today().year + 1)
+    fake.matrix_prices[1]["expires"] = expires
+    params = {"customer_number": "BAYADV", "part_number": "SUB-BEC-12352-0016", "part_revision": "A", "quantity": 10}
+    quotes = client.get("/api/shopkeeper/prices", params=params).json()["quotes"]
+    matrix = next(row for row in quotes if row["source"] == "matrix")
+    assert matrix["expires"] == expires.isoformat()
+    suggested = client.get("/api/shopkeeper/prices/suggest", params=params).json()
+    assert suggested["source"] == "matrix"
+    assert suggested["expires"] == expires.isoformat()
+
+
 def test_price_lookup_returns_contract_matrix_and_history(client):
     FakeShopKeeper.reset_shared()
     response = client.get(
@@ -131,6 +144,7 @@ def test_price_lookup_returns_contract_matrix_and_history(client):
     matrix = next(row for row in quotes if row["source"] == "matrix")
     assert matrix["quantity"] == 10
     assert Decimal(str(matrix["unit_price"])) == Decimal("8.50")
+    assert matrix["expires"] is None
     proposal = next(row for row in quotes if row["source"] == "proposal")
     assert proposal["job_number"] == "P1001"
     assert proposal["order_date"] == "2026-07-02"

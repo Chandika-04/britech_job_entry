@@ -155,7 +155,14 @@ export function PriceLookup({
                     {/* One number: the job number for past jobs, the proposal number for proposals. */}
                     {quote.job_number || quote.note || "—"}
                   </td>
-                  <td className="whitespace-nowrap font-mono text-xs">{formatDate(quote.order_date)}</td>
+                  <td className="whitespace-nowrap font-mono text-xs">
+                    {/* Matrix prices show when they expire; job and proposal prices show when they were used. */}
+                    {quote.source === "matrix"
+                      ? quote.expires
+                        ? `Expires ${formatDate(quote.expires)}`
+                        : "No expiry"
+                      : formatDate(quote.order_date)}
+                  </td>
                   {pickLabel && onPick ? (
                     <td>
                       <Button
