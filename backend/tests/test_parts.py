@@ -159,3 +159,65 @@ def test_copy_part_template_rejects_locked_and_unknown(client):
     assert missing.status_code == 404
     empty = client.post("/api/parts/101/copy-template", json={"template_id": 2})
     assert empty.status_code == 409
+
+
+def test_price_matrix_add_edit_delete(client):
+    from datetime import date, timedelta
+    from decimal import Decimal
+
+    FakeShopKeeper.reset_shared()
+    part = client.get("/api/parts/101").json()
+    assert [(row["quantity"], Decimal(row["price"])) for row in part["price_matrix"]] == [(1, Decimal("10")), (10, Decimal("8.5"))]
+
+    expires = (date.today() + timedelta(days=365)).isoformat()
+    added = client.post(
+        "/api/parts/101/prices",
+        json={"quantity": 50, "price": "7.25", "expiration_date": expires, "note": " bulk "},
+    )
+    assert added.status_code == 201, added.text
+    row = next(item for item in added.json()["price_matrix"] if item["quantity"] == 50)
+    assert Decimal(row["price"]) == Decimal("7.25")
+    assert row["expiration_date"] == expires
+    assert row["last_date"] == date.today().isoformat()
+    assert row["note"] == "bulk"
+    assert row["expired"] is False
+
+    # One current price per qty break.
+    dup = client.post("/api/parts/101/prices", json={"quantity": 50, "price": "7.00"})
+    assert dup.status_code == 409
+    assert "Qty 50" in dup.json()["detail"]
+    past = client.post("/api/parts/101/prices", json={"quantity": 75, "price": "7.00", "expiration_date": "2020-01-01"})
+    assert past.status_code == 422
+
+    edited = client.put(
+        f"/api/parts/101/prices/{row['id']}",
+        json={"quantity": 50, "price": "7.10", "expiration_date": None, "rowversion": row["rowversion"]},
+    )
+    assert edited.status_code == 200, edited.text
+    row2 = next(item for item in edited.json()["price_matrix"] if item["quantity"] == 50)
+    assert Decimal(row2["price"]) == Decimal("7.10")
+    assert row2["expiration_date"] is None
+
+    stale = client.put(
+        f"/api/parts/101/prices/{row['id']}",
+        json={"quantity": 50, "price": "6.00", "rowversion": row["rowversion"]},
+    )
+    assert stale.status_code == 409
+
+    # Price lookup picks up the new 50-piece break.
+    quotes = client.get(
+        "/api/shopkeeper/prices",
+        params={"customer_number": "BAYADV", "part_number": "SUB-BEC-12352-0016", "part_revision": "A", "quantity": 60},
+    ).json()["quotes"]
+    assert any(q["source"] == "matrix" and q["quantity"] == 50 for q in quotes)
+
+    deleted = client.delete(f"/api/parts/101/prices/{row['id']}", params={"rowversion": row2["rowversion"]})
+    assert deleted.status_code == 200
+    assert all(item["quantity"] != 50 for item in deleted.json()["price_matrix"])
+
+
+def test_price_matrix_refuses_locked_part_and_bad_qty(client):
+    fake = FakeShopKeeper.reset_shared()
+    fake.locked_parts.add(101)
+    assert client.post("/api/parts/101/prices", json={"quantity": 5, "price": "1.00"}).status_code == 409
+    assert client.post("/api/parts/102/prices", json={"quantity": 40000, "price": "1.00"}).status_code == 422

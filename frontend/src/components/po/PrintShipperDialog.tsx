@@ -53,6 +53,7 @@ export function PrintShipperDialog({
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const printStatus = usePrintStatus();
+  const [printer, setPrinter] = useState(""); // "" = the packing list's default printer
 
   useEffect(() => {
     return () => {
@@ -84,7 +85,7 @@ export function PrintShipperDialog({
     try {
       if (mode === "print" && printStatus?.enabled) {
         // Server prints one side to the shop printer and marks the shipper printed in ShopKeeper.
-        await api.printShipperDirect(shipNumber, copies, preparedBy);
+        await api.printShipperDirect(shipNumber, copies, preparedBy, printer || null);
         onPrinted?.();
         onClose();
         return;
@@ -154,7 +155,15 @@ export function PrintShipperDialog({
               Print
             </label>
           </div>
-          {mode === "print" ? <DirectPrintNote status={printStatus} kinds={["shipper"]} /> : null}
+          {mode === "print" ? (
+            <DirectPrintNote
+              status={printStatus}
+              kinds={["shipper"]}
+              printer={printer}
+              onPrinter={setPrinter}
+              disabled={busy}
+            />
+          ) : null}
           {error ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p> : null}
           {previewUrl ? (
             <iframe

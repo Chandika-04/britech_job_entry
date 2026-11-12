@@ -13,6 +13,8 @@ from app.services.shopkeeper.types import (
     PartMasterListRow,
     PartPicture,
     PartRecord,
+    PriceMatrixRow,
+    PriceMatrixWrite,
     PriceQuote,
     PrintDocumentData,
     ShipWritePayload,
@@ -96,6 +98,16 @@ class ShopKeeperProvider(Protocol):
     def save_part_operations(self, pm_linkid: int, operations: list[OperationRow]) -> list[OperationRow]: ...
 
     def set_part_quality_hold(self, pm_linkid: int, hold: bool, note: str | None) -> None: ...
+
+    def list_price_matrix(self, pm_linkid: int) -> list[PriceMatrixRow]: ...
+
+    def add_price_matrix_row(self, pm_linkid: int, row: PriceMatrixWrite) -> int: ...
+
+    def update_price_matrix_row(
+        self, pm_linkid: int, pmpm_id: int, row: PriceMatrixWrite, rowversion: str | None
+    ) -> None: ...
+
+    def delete_price_matrix_row(self, pm_linkid: int, pmpm_id: int, rowversion: str | None) -> None: ...
 
     def link_part_cert(self, pm_linkid: int, ctxt_id: str) -> None: ...
 

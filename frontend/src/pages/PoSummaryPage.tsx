@@ -20,7 +20,7 @@ export function PoSummaryPage() {
   const poNumber = (params.get("po") ?? "").trim();
   const [page, setPage] = useState<ShopKeeperPoPage | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useDocumentTitle([`PO ${poLabel(poNumber)} summary`]);
+  useDocumentTitle(["PO summary", customerCode, poNumber ? `PO ${poNumber}` : null]);
 
   useEffect(() => {
     if (!customerCode) {

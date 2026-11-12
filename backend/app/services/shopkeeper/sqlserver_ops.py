@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from app.exceptions import AppError, ConflictError
@@ -16,6 +16,8 @@ from app.services.shopkeeper.types import (
     PartHeaderUpdate,
     PartMasterListRow,
     PartPicture,
+    PriceMatrixRow,
+    PriceMatrixWrite,
     PrintDocumentData,
     WorkCenter,
 )
@@ -947,6 +949,113 @@ class SqlServerOpsMixin:
         finally:
             conn.close()
 
+    def list_price_matrix(self, pm_linkid: int) -> list[PriceMatrixRow]:
+        conn, _ = self._connect()
+        try:
+            rows = conn.cursor().execute(
+                """
+                SELECT Pmpm_ID, Pmpm_Qty, Pmpm_Price, Pmpm_LastDate, Pmpm_ExpirationDate, Pmpm_Note, SSMA_TimeStamp
+                FROM dbo.PartMasterPriceMatrix
+                WHERE Pmpm_LinkID = ?
+                ORDER BY Pmpm_Qty, Pmpm_LastDate DESC, Pmpm_ID DESC
+                """,
+                pm_linkid,
+            ).fetchall()
+            return [
+                PriceMatrixRow(
+                    id=int(row[0]),
+                    quantity=int(row[1] or 0),
+                    price=Decimal(str(row[2] if row[2] is not None else 0)),
+                    last_date=_as_date_only(row[3]),
+                    expiration_date=_as_date_only(row[4]),
+                    note=_as_optional_str(row[5]),
+                    rowversion=rowversion_hex(row[6]),
+                )
+                for row in rows
+            ]
+        finally:
+            conn.close()
+
+    def add_price_matrix_row(self, pm_linkid: int, row: PriceMatrixWrite) -> int:
+        conn, _ = self._connect()
+        try:
+            cur = conn.cursor()
+            _assert_part_writable(cur, pm_linkid)
+            created = cur.execute(
+                """
+                INSERT INTO dbo.PartMasterPriceMatrix
+                    (Pmpm_LinkID, Pmpm_Qty, Pmpm_Price, Pmpm_LastDate, Pmpm_ExpirationDate, Pmpm_Note)
+                OUTPUT INSERTED.Pmpm_ID
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                pm_linkid,
+                row.quantity,
+                row.price,
+                _today_midnight(),
+                _date_to_datetime(row.expiration_date),
+                row.note,
+            ).fetchone()
+            conn.commit()
+            return int(created[0])
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def update_price_matrix_row(
+        self, pm_linkid: int, pmpm_id: int, row: PriceMatrixWrite, rowversion: str | None
+    ) -> None:
+        conn, _ = self._connect()
+        try:
+            cur = conn.cursor()
+            _assert_part_writable(cur, pm_linkid)
+            ts = _price_row_timestamp(cur, pm_linkid, pmpm_id, rowversion)
+            cur.execute(
+                """
+                UPDATE dbo.PartMasterPriceMatrix
+                SET Pmpm_Qty = ?, Pmpm_Price = ?, Pmpm_LastDate = ?, Pmpm_ExpirationDate = ?, Pmpm_Note = ?
+                WHERE Pmpm_ID = ? AND Pmpm_LinkID = ? AND SSMA_TimeStamp = ?
+                """,
+                row.quantity,
+                row.price,
+                _today_midnight(),
+                _date_to_datetime(row.expiration_date),
+                row.note,
+                pmpm_id,
+                pm_linkid,
+                ts,
+            )
+            if cur.rowcount != 1:
+                raise AppError("This price was changed by someone else. Reload and try again.", status_code=409)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def delete_price_matrix_row(self, pm_linkid: int, pmpm_id: int, rowversion: str | None) -> None:
+        conn, _ = self._connect()
+        try:
+            cur = conn.cursor()
+            _assert_part_writable(cur, pm_linkid)
+            ts = _price_row_timestamp(cur, pm_linkid, pmpm_id, rowversion)
+            cur.execute(
+                "DELETE FROM dbo.PartMasterPriceMatrix WHERE Pmpm_ID = ? AND Pmpm_LinkID = ? AND SSMA_TimeStamp = ?",
+                pmpm_id,
+                pm_linkid,
+                ts,
+            )
+            if cur.rowcount != 1:
+                raise AppError("This price was changed by someone else. Reload and try again.", status_code=409)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
     def link_part_cert(self, pm_linkid: int, ctxt_id: str) -> None:
         conn, _ = self._connect()
         try:
@@ -1237,6 +1346,41 @@ def _production_part_exists(cur, part_number: str, part_revision: str, exclude_i
         sql += " AND Pm_LinkID <> ?"
         params.append(exclude_id)
     return cur.execute(sql, *params).fetchone() is not None
+
+
+def _as_date_only(value: object) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return None
+
+
+def _date_to_datetime(value: date | None) -> datetime | None:
+    return datetime(value.year, value.month, value.day) if value else None
+
+
+def _today_midnight() -> datetime:
+    today = date.today()
+    return datetime(today.year, today.month, today.day)
+
+
+def _price_row_timestamp(cur, pm_linkid: int, pmpm_id: int, rowversion: str | None):
+    """Current SSMA_TimeStamp of a price row; refuses if the editor's copy is stale."""
+    row = cur.execute(
+        "SELECT SSMA_TimeStamp FROM dbo.PartMasterPriceMatrix WHERE Pmpm_ID = ? AND Pmpm_LinkID = ?",
+        pmpm_id,
+        pm_linkid,
+    ).fetchone()
+    if not row:
+        raise AppError("Price not found. Reload the part.", status_code=404)
+    expected = rowversion_bytes(rowversion)
+    current = row[0].tobytes() if isinstance(row[0], memoryview) else row[0]
+    if expected is not None and current != expected:
+        raise AppError("This price was changed by someone else. Reload and try again.", status_code=409)
+    return row[0]
 
 
 def _assert_part_writable(cur, pm_linkid: int):

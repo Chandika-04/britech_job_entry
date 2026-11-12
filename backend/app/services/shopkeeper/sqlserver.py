@@ -10,6 +10,7 @@ from app.services.shopkeeper.lookup import (
     field_min_len,
     normalize_search_by,
     normalize_shipper_search_by,
+    pick_matrix_break,
     po_group_from_jobs,
     prefix_like,
     ready_term,
@@ -1267,9 +1268,9 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
                 ]
                 breaks = [row for row in breaks if row[1] is not None]
                 if quantity is not None:
-                    eligible = [row for row in breaks if row[0] <= quantity]
-                    if eligible:
-                        qty, price, note = max(eligible, key=lambda row: row[0])
+                    chosen = pick_matrix_break(breaks, quantity)
+                    if chosen:
+                        qty, price, note = chosen
                         quotes.append(
                             PriceQuote(
                                 source="matrix",

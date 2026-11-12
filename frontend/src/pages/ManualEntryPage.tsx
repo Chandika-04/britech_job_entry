@@ -22,8 +22,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { poCustomerCode } from "@/components/po/lines/helpers";
 import { ShipperActions } from "@/components/po/ShipperActions";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
+import { describeSuggestion, usePriceAutofill } from "@/lib/usePriceAutofill";
 import { cn, focusNextEmpty, formatQty, formatUsd, handleEnterAdvance, todayIso } from "@/lib/utils";
 import type { CustomerCandidate, LineItem, LineItemDraft, PartCandidate, PoDetail, PoDraft } from "@/types/po";
 
@@ -167,7 +169,7 @@ export function ManualEntryPage() {
   const [pickedParts, setPickedParts] = useState<Record<number, PartCandidate>>({});
   useDocumentTitle([
     draft?.po_number || po?.po_number ? `PO ${draft?.po_number || po?.po_number}` : "Manual entry",
-    draft?.customer_name || po?.customer_name,
+    (po ? poCustomerCode(po) : "") || draft?.customer_name || po?.customer_name,
   ]);
 
   const load = async (poId: string) => {
@@ -269,6 +271,36 @@ export function ManualEntryPage() {
     setDraft({ ...draft, line_items: draft.line_items.filter((_, itemIndex) => itemIndex !== index) });
   };
 
+  const lineKey = (item: LineItemDraft, index: number) => (item.id != null ? String(item.id) : `new-${index}`);
+  const priceNotes = usePriceAutofill(
+    (draft?.line_items ?? []).map((item, index) => {
+      const line = po?.line_items.find((row) => row.id === item.id);
+      const picked = pickedParts[index];
+      return {
+        key: lineKey(item, index),
+        label: item.line_number || String(index + 1),
+        customer: line?.resolved_customer_code || pickedCustomer?.customer_number,
+        part: picked?.part_number || line?.resolved_part_number,
+        rev: picked?.part_revision || line?.resolved_part_revision,
+        quantity: item.quantity,
+        price: item.unit_price,
+      };
+    }),
+    (target, price, quote) => {
+      setDraft((current) =>
+        current
+          ? {
+              ...current,
+              line_items: current.line_items.map((item, index) =>
+                lineKey(item, index) === target.key ? { ...item, unit_price: price } : item,
+              ),
+            }
+          : current,
+      );
+      setNotice(`Line ${target.label}: price ${price} filled from the ${describeSuggestion(quote)}. Save to keep it.`);
+    },
+  );
+
   const applyPrice = (index: number, price: string) => {
     if (!draft) return;
     const line_items = draft.line_items.map((item, itemIndex) =>
@@ -304,7 +336,6 @@ export function ManualEntryPage() {
         <div className="flex flex-wrap items-center gap-1.5">
           {id ? (
             <>
-              <ShipperActions po={po} disabled={busy} onChangePo={setPo} onError={setError} onNotice={setNotice} />
               <StatusBadge status={po.status} source={po.source} />
               <ReviewBadge state={po.review_state} />
             </>
@@ -391,6 +422,7 @@ export function ManualEntryPage() {
               setDraft((current) => (current ? applyPart(current, index, part) : current));
             }}
             pickedCustomerNumber={pickedCustomer?.customer_number || null}
+            priceNote={priceNotes[lineKey(item, index)]}
             onRun={run}
             onNotice={setNotice}
           />
@@ -411,6 +443,16 @@ export function ManualEntryPage() {
       <div className="sticky bottom-2 z-10 rounded-lg border border-rule bg-white/95 px-3 py-2.5 shadow-[0_-2px_8px_rgb(22_32_44/0.06)] backdrop-blur">
         <div className="flex items-center gap-2">
           <p className="hidden flex-1 text-xs text-muted md:block">Save puts this PO on the work list and unlocks job creation.</p>
+          {id ? (
+            <ShipperActions
+              po={po}
+              disabled={busy}
+              onChangePo={setPo}
+              onError={setError}
+              onNotice={setNotice}
+              inActionBar
+            />
+          ) : null}
           <Button disabled={fieldsDisabled} onClick={() => save()}>
             Save
           </Button>
@@ -432,6 +474,7 @@ function ManualLineCard({
   onPickPrice,
   onPickPart,
   pickedCustomerNumber,
+  priceNote,
   onRun,
   onNotice,
 }: {
@@ -446,6 +489,7 @@ function ManualLineCard({
   onPickPrice: (price: string) => void;
   onPickPart: (part: PartCandidate) => void;
   pickedCustomerNumber: string | null;
+  priceNote?: string;
   onRun: RunLine;
   onNotice: (message: string) => void;
 }) {
@@ -459,6 +503,26 @@ function ManualLineCard({
       setPrintJob({ jobNumber, certAvailable });
     });
   const fieldsOff = disabled || locked;
+  const [printBusy, setPrintBusy] = useState(false);
+
+  // Print a job that already exists: same checks and print box as the Review page and job page.
+  const printCreatedJob = async () => {
+    const jobNumber = line?.erp_job_number;
+    if (!jobNumber) return;
+    setPrintBusy(true);
+    try {
+      const job = await api.getJob(jobNumber);
+      if (job.missing_ops) {
+        onNotice(`Job ${jobNumber} has no operations yet. Add them on the job page, then print.`);
+        return;
+      }
+      void askPrint(jobNumber, job.cert_required && job.cert_linked);
+    } catch (err) {
+      onNotice(err instanceof Error ? err.message : `Could not load job ${jobNumber}.`);
+    } finally {
+      setPrintBusy(false);
+    }
+  };
 
   return (
     <Card>
@@ -553,6 +617,7 @@ function ManualLineCard({
               onBlur={(event) => onUpdate("unit_price", formatUsd(event.currentTarget.value))}
               onFocus={(event) => event.currentTarget.select()}
             />
+            {priceNote ? <p className="text-xs text-accent-text">From {priceNote}</p> : null}
           </Field>
           <Field label="Due" className="col-span-2">
             <Input
@@ -592,6 +657,22 @@ function ManualLineCard({
               onNotice={onNotice}
               onAskPrint={askPrint}
             />
+            {created && line.erp_job_number ? (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <span className="text-xs text-muted">
+                  {line.erp_traveler_printed ? "Traveler printed." : "Traveler not printed yet."}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={line.erp_traveler_printed ? "outline" : "default"}
+                  disabled={disabled || printBusy}
+                  onClick={() => void printCreatedJob()}
+                >
+                  {printBusy ? "Loading…" : "Print"}
+                </Button>
+              </div>
+            ) : null}
             {printJob ? (
               <PrintJobDialog
                 jobNumber={printJob.jobNumber}

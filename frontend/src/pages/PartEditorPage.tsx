@@ -6,6 +6,7 @@ import { api } from "@/api/client";
 import { CertPicker } from "@/components/po/CertPicker";
 import { CustomerCodeField } from "@/components/po/CustomerCodeField";
 import { OperationsEditor } from "@/components/po/OperationsEditor";
+import { PriceMatrixCard } from "@/components/po/PriceMatrixCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -339,7 +340,8 @@ export function PartEditorPage() {
             </select>
             <Button
               size="sm"
-              variant="outline"
+              // Filled once a template is picked: it is not applied until this is clicked.
+              variant={templateId ? "default" : "outline"}
               disabled={controlsOff || !templateId}
               onClick={() => {
                 const template = templates.find((row) => String(row.id) === templateId);
@@ -465,16 +467,13 @@ export function PartEditorPage() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Price matrix</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted">
-            Not edited here yet. Once pricing is standardized, contract and matrix prices for this part will live on this card.
-          </p>
-        </CardContent>
-      </Card>
+      <PriceMatrixCard
+        part={isNew ? null : part}
+        disabled={busy || locked}
+        onChange={setPart}
+        onError={setError}
+        onNotice={setNotice}
+      />
     </div>
   );
 }

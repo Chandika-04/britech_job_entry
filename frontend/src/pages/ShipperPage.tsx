@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { api } from "@/api/client";
 import { PrintShipperDialog } from "@/components/po/PrintShipperDialog";
@@ -31,7 +31,12 @@ export function ShipperPage() {
   const [shipper, setShipper] = useState<ShopKeeperShipperPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
-  useDocumentTitle([shipNumber ? `Shipper ${shipNumber}` : "Shipper"]);
+  const shipperPos = (shipper?.po_numbers ?? "").split(",").map((po) => po.trim()).filter(Boolean);
+  useDocumentTitle([
+    "Shipper",
+    shipper?.customer_code,
+    shipperPos.length ? `PO ${shipperPos[0]}${shipperPos.length > 1 ? ` +${shipperPos.length - 1}` : ""}` : null,
+  ]);
 
   const load = useCallback(() => {
     if (!shipNumber) return;
@@ -81,7 +86,6 @@ export function ShipperPage() {
                 disabled={shipper.job_count === 0}
                 onClick={() => setPrinting(true)}
               >
-                <Printer className="h-3.5 w-3.5" />
                 Print packing list
               </Button>
             </CardTitle>

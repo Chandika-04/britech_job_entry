@@ -43,7 +43,8 @@ interface Props {
   disabled?: boolean;
   currentPrice?: string;
   pickLabel?: string;
-  onPick: (price: string) => void;
+  /** Leave out for a view-only lookup (rows are not clickable). */
+  onPick?: (price: string) => void;
   onAfterPick?: () => void;
 }
 
@@ -64,6 +65,7 @@ export function PriceLookup({
   const [open, setOpen] = useState(false);
   const ready = Boolean(customerNumber && partNumber && partRevision);
   const showing = open && quotes !== null;
+  const pickable = Boolean(onPick) && !disabled;
 
   const search = async () => {
     if (!customerNumber || !partNumber || !partRevision) return;
@@ -115,25 +117,25 @@ export function PriceLookup({
                 <th className="num">Qty</th>
                 <th>Job / quote</th>
                 <th>Date</th>
-                {pickLabel ? <th /> : null}
+                {pickLabel && onPick ? <th /> : null}
               </tr>
             </thead>
             <tbody>
               {orderedQuotes(quotes).map((quote, index) => (
                 <tr
                   key={`${quote.source}-${quote.job_number ?? index}-${quote.unit_price}`}
-                  className={disabled ? "pick-row is-disabled" : "pick-row"}
-                  tabIndex={disabled || pickLabel ? undefined : 0}
+                  className={pickable ? "pick-row" : onPick ? "pick-row is-disabled" : undefined}
+                  tabIndex={!pickable || pickLabel ? undefined : 0}
                   onClick={() => {
-                    if (disabled || pickLabel) return;
-                    onPick(formatUsd(quote.unit_price));
+                    if (!pickable || pickLabel) return;
+                    onPick?.(formatUsd(quote.unit_price));
                     onAfterPick?.();
                   }}
                   onKeyDown={(event) => {
-                    if (disabled || pickLabel) return;
+                    if (!pickable || pickLabel) return;
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      onPick(formatUsd(quote.unit_price));
+                      onPick?.(formatUsd(quote.unit_price));
                       onAfterPick?.();
                     }
                   }}
@@ -152,14 +154,14 @@ export function PriceLookup({
                     )}
                   </td>
                   <td className="whitespace-nowrap font-mono text-xs text-muted">{formatDate(quote.order_date)}</td>
-                  {pickLabel ? (
+                  {pickLabel && onPick ? (
                     <td>
                       <Button
                         type="button"
                         size="sm"
                         disabled={disabled}
                         onClick={() => {
-                          onPick(formatUsd(quote.unit_price));
+                          onPick?.(formatUsd(quote.unit_price));
                           onAfterPick?.();
                         }}
                       >

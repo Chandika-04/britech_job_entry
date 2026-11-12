@@ -346,7 +346,7 @@ def test_traveler_pdf_includes_job_notes():
     assert doc.page_count % 2 == 0
     doc.close()
     assert "Job Traveler" in text
-    assert "SK066 Rev C" in text
+    assert "SK066" not in text
     assert "Hold for customer pickup" in text
     assert "10/1/26" in text
     assert "Make To Order" in text
@@ -508,7 +508,7 @@ def test_certification_pdf_matches_shopkeeper_form():
     doc.close()
     assert "CERTIFICATION OF" in text
     assert "CONFORMANCE" in text
-    assert "SK064 Rev B" in text
+    assert "SK064" not in text
     assert "SHIPPED TO:" in text
     assert "APILLIS" in text
     assert "38875 Cherry St" in text
@@ -643,3 +643,32 @@ def test_describe_print_settings():
     assert describe_settings("duplexlong") == "front and back"
     assert describe_settings("simplex,2x") == "one side, 2 copies"
     assert describe_settings("") == "printer default sides"
+
+
+def test_printer_picker_lists_printers_and_overrides_default(client, settings, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setenv("SHIPPER_PRINTER_NAME", "Shop Printer - Single")
+    get_settings.cache_clear()
+    FakeShopKeeper.reset_shared()
+
+    status = client.get("/api/print/status").json()
+    assert status["printers"] == ["fake", "Shop Printer - Single"]
+    assert status["documents"]["shipper"]["printer"] == "Shop Printer - Single"
+
+    # Picking a printer overrides the shipper default but keeps its one-side setting.
+    picked = client.post(
+        "/api/shopkeeper/shippers/S000012/print/direct",
+        json={"copies": ["Office Copy"], "prepared_by": "cr", "printer": "FAKE"},
+    )
+    assert picked.status_code == 200, picked.text
+    assert picked.json()["sent"] == ["Shipper sent to fake (one side)."]
+    assert [(doc.printer, doc.settings) for doc in FakePrinter.shared().printed] == [("fake", "simplex")]
+
+    unknown = client.post(
+        "/api/shopkeeper/shippers/S000012/print/direct",
+        json={"copies": ["Office Copy"], "prepared_by": "cr", "printer": "Somebody's Printer"},
+    )
+    assert unknown.status_code == 422
+    assert "not available" in unknown.json()["detail"]
+    assert len(FakePrinter.shared().printed) == 1

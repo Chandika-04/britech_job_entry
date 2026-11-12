@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -20,6 +22,8 @@ from app.schemas.operations import (
     PartListResponse,
     PartListRowOut,
     PartPictureOut,
+    PriceMatrixIn,
+    PriceMatrixRowOut,
     WorkCenterOut,
 )
 from app.services.po_service import to_detail
@@ -30,12 +34,19 @@ from app.services.print.documents import (
     build_shipper_pdf,
     build_traveler_pdf,
 )
-from app.services.print.printer import DOC_LABELS, describe_settings, print_document
+from app.services.print.printer import DOC_LABELS, describe_settings, print_document, resolve_printer_choice
 from app.services.shopkeeper import get_shopkeeper_provider
 from app.services.shopkeeper.ops_util import note_plain_text, note_to_shopkeeper_html, operation_from_payload
 from app.services.shopkeeper.provider import ShopKeeperProvider
 from app.services.shopkeeper.lookup import normalize_part_search_by
-from app.services.shopkeeper.types import CreatePrintResult, JobHeaderUpdate, PartHeaderUpdate, ShipperPrintData
+from app.services.shopkeeper.types import (
+    CreatePrintResult,
+    JobHeaderUpdate,
+    PartHeaderUpdate,
+    PriceMatrixRow,
+    PriceMatrixWrite,
+    ShipperPrintData,
+)
 from app.services.shopkeeper.writer import create_job_for_line, normalize_prepared_by
 
 
@@ -279,6 +290,7 @@ def print_job(
     *,
     traveler: bool = True,
     certification: bool = False,
+    printer: str | None = None,
 ) -> list[str]:
     """Print a job's traveler and/or cert straight to the shop printer (no browser dialog).
 
@@ -291,17 +303,18 @@ def print_job(
     job = _job_ready_to_print(job_number, provider)
     if certification and not job.cert_required:
         raise AppError("Certification is not required for this job.", status_code=409)
+    chosen = resolve_printer_choice(printer)
     sent: list[str] = []
     if traveler:
         pdf = _build_print_pdf(job_number, build_traveler_pdf, provider)
-        sent.append(_sent("traveler", print_document("traveler", pdf, f"traveler {job_number}")))
+        sent.append(_sent("traveler", print_document("traveler", pdf, f"traveler {job_number}", chosen)))
         try:
             mark_traveler_printed(db, job_number, provider)
         except AppError as exc:
             raise AppError(f"{sent[-1]} ShopKeeper was not marked printed: {exc.message}", status_code=exc.status_code) from exc
     if certification:
         pdf = _build_print_pdf(job_number, build_certification_pdf, provider)
-        sent.append(_sent("certification", print_document("certification", pdf, f"certification {job_number}")))
+        sent.append(_sent("certification", print_document("certification", pdf, f"certification {job_number}", chosen)))
     return sent
 
 
@@ -310,11 +323,13 @@ def print_shipper(
     copies: list[str] | None = None,
     prepared_by: str | None = None,
     provider: ShopKeeperProvider | None = None,
+    printer: str | None = None,
 ) -> list[str]:
     """Print the SK055 packing list straight to the shop printer, then set Jsm_ShipperPrinted."""
     provider = provider or get_shopkeeper_provider()
+    chosen = resolve_printer_choice(printer)
     pdf = shipper_pdf(ship_number, copies, provider, prepared_by=prepared_by)
-    sent = _sent("shipper", print_document("shipper", pdf, f"shipper {ship_number}"))
+    sent = _sent("shipper", print_document("shipper", pdf, f"shipper {ship_number}", chosen))
     try:
         mark_shipper_printed(ship_number, provider)
     except AppError as exc:
@@ -344,7 +359,72 @@ def get_part_editor(pm_linkid: int, provider: ShopKeeperProvider | None = None) 
         cert_library=[CertTextOut.model_validate(row, from_attributes=True) for row in provider.list_certification_texts()],
         work_centers=[WorkCenterOut.model_validate(row, from_attributes=True) for row in provider.list_work_centers()],
         templates=[OpTemplateOut.model_validate(row, from_attributes=True) for row in provider.list_op_templates()],
+        price_matrix=_price_matrix_out(provider.list_price_matrix(pm_linkid)),
     )
+
+
+def _is_expired(row: PriceMatrixRow, today: date) -> bool:
+    return row.expiration_date is not None and row.expiration_date < today
+
+
+def _price_matrix_out(rows: list[PriceMatrixRow]) -> list[PriceMatrixRowOut]:
+    today = date.today()
+    return [
+        PriceMatrixRowOut(
+            id=row.id,
+            quantity=row.quantity,
+            price=row.price,
+            last_date=row.last_date,
+            expiration_date=row.expiration_date,
+            note=row.note,
+            rowversion=row.rowversion,
+            expired=_is_expired(row, today),
+        )
+        for row in rows
+    ]
+
+
+def _price_write(payload: PriceMatrixIn, provider: ShopKeeperProvider, pm_linkid: int, editing: int | None) -> PriceMatrixWrite:
+    """One current (unexpired) price per quantity break; expired rows stay as history."""
+    today = date.today()
+    if payload.expiration_date is not None and payload.expiration_date < today:
+        raise AppError("The expiry date is in the past. Pick today or later, or leave it blank.", status_code=422)
+    for row in provider.list_price_matrix(pm_linkid):
+        if row.id != editing and row.quantity == payload.quantity and not _is_expired(row, today):
+            raise AppError(
+                f"Qty {payload.quantity} already has a current price ({row.price:.2f}). Edit that row instead.",
+                status_code=409,
+            )
+    note = (payload.note or "").strip() or None
+    return PriceMatrixWrite(
+        quantity=payload.quantity,
+        price=payload.price.quantize(Decimal("0.0001")),
+        expiration_date=payload.expiration_date,
+        note=note,
+    )
+
+
+def add_price(pm_linkid: int, payload: PriceMatrixIn, provider: ShopKeeperProvider | None = None) -> PartEditorOut:
+    provider = provider or get_shopkeeper_provider()
+    provider.add_price_matrix_row(pm_linkid, _price_write(payload, provider, pm_linkid, None))
+    return get_part_editor(pm_linkid, provider)
+
+
+def update_price(
+    pm_linkid: int, pmpm_id: int, payload: PriceMatrixIn, provider: ShopKeeperProvider | None = None
+) -> PartEditorOut:
+    provider = provider or get_shopkeeper_provider()
+    write = _price_write(payload, provider, pm_linkid, pmpm_id)
+    provider.update_price_matrix_row(pm_linkid, pmpm_id, write, payload.rowversion)
+    return get_part_editor(pm_linkid, provider)
+
+
+def delete_price(
+    pm_linkid: int, pmpm_id: int, rowversion: str | None, provider: ShopKeeperProvider | None = None
+) -> PartEditorOut:
+    provider = provider or get_shopkeeper_provider()
+    provider.delete_price_matrix_row(pm_linkid, pmpm_id, rowversion)
+    return get_part_editor(pm_linkid, provider)
 
 
 def list_parts(

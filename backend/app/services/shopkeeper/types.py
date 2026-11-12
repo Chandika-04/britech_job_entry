@@ -206,6 +206,27 @@ class ShopKeeperShipperPage:
 
 
 @dataclass
+class PriceMatrixRow:
+    """One PartMasterPriceMatrix row: the price for orders of `quantity` or more."""
+
+    id: int
+    quantity: int
+    price: Decimal
+    last_date: date | None = None
+    expiration_date: date | None = None
+    note: str | None = None
+    rowversion: str | None = None
+
+
+@dataclass
+class PriceMatrixWrite:
+    quantity: int
+    price: Decimal
+    expiration_date: date | None = None
+    note: str | None = None
+
+
+@dataclass
 class ShipperPrintData:
     """Everything the SK055 packing list needs: the shipper, its jobs, and the customer it goes to."""
 

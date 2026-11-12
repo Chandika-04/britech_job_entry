@@ -44,6 +44,7 @@ from app.services.shopkeeper.writer import (
     set_cert_required,
     skip_line,
     suggest_customer,
+    suggest_price,
     unskip_line,
 )
 
@@ -169,6 +170,18 @@ def shopkeeper_prices(
         quantity=quantity,
         quotes=[PriceQuoteOut.model_validate(quote, from_attributes=True) for quote in quotes],
     )
+
+
+@router.get("/shopkeeper/prices/suggest", response_model=PriceQuoteOut | None)
+def shopkeeper_price_suggestion(
+    customer_number: str = Query(..., min_length=1),
+    part_number: str = Query(..., min_length=1),
+    part_revision: str = Query("", max_length=5),
+    quantity: int = Query(..., ge=1),
+) -> PriceQuoteOut | None:
+    """Autofill price: price-matrix break for the quantity, else the last job price for this customer."""
+    quote = suggest_price(customer_number, part_number, part_revision, quantity)
+    return PriceQuoteOut.model_validate(quote, from_attributes=True) if quote else None
 
 
 @router.get("/po/{po_id}/customer-suggestion", response_model=CustomerSuggestionResponse)

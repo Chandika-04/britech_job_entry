@@ -150,3 +150,39 @@ def test_lookup_prices_helper_filters_by_customer_part():
     assert any(row.source == "history" and row.job_number == "198883" for row in quotes)
     assert any(row.source == "proposal" and row.job_number == "P1001" and row.order_date == date(2026, 7, 2) for row in quotes)
     assert not any(row.job_number == "198301" for row in quotes)
+
+
+def test_pick_matrix_break_uses_next_break_up():
+    from app.services.shopkeeper.lookup import pick_matrix_break
+
+    breaks = [(10, "p10"), (1, "p1"), (5, "p5")]
+    picked = {qty: pick_matrix_break(breaks, qty)[1] for qty in (1, 2, 5, 6, 10, 11, 500)}
+    assert picked == {1: "p1", 2: "p5", 5: "p5", 6: "p10", 10: "p10", 11: "p10", 500: "p10"}
+    assert pick_matrix_break([], 3) is None
+
+
+def test_price_suggestion_matrix_then_last_job_price(client):
+    from datetime import date
+
+    fake = FakeShopKeeper.reset_shared()
+    url = "/api/shopkeeper/prices/suggest"
+    base = {"customer_number": "BAYADV", "part_number": "SUB-BEC-12352-0016", "part_revision": "A"}
+
+    # Matrix breaks for part 101 are qty 1 ($10.00) and qty 10 ($8.50).
+    assert Decimal(client.get(url, params={**base, "quantity": 1}).json()["unit_price"]) == Decimal("10.00")
+    six = client.get(url, params={**base, "quantity": 6}).json()
+    assert (six["source"], six["quantity"], Decimal(six["unit_price"])) == ("matrix", 10, Decimal("8.50"))
+    assert Decimal(client.get(url, params={**base, "quantity": 40}).json()["unit_price"]) == Decimal("8.50")
+
+    # Expired matrix rows are skipped; with none left, fall back to the newest job price for this customer.
+    for row in fake.matrix_prices:
+        row["expires"] = date(2020, 1, 1)
+    history = client.get(url, params={**base, "quantity": 6}).json()
+    assert history["source"] == "history"
+    assert history["job_number"] == "199101"
+    assert Decimal(history["unit_price"]) == Decimal("9.10")
+
+    # No matrix and no job history: nothing to fill.
+    none = client.get(url, params={"customer_number": "CORTEC", "part_number": "NO-OPS", "part_revision": "A", "quantity": 3})
+    assert none.status_code == 200
+    assert none.json() is None

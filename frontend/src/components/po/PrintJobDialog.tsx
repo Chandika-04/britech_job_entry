@@ -41,6 +41,7 @@ export function PrintJobDialog({
   }, [busy, onClose]);
 
   const printStatus = usePrintStatus();
+  const [printer, setPrinter] = useState(""); // "" = each document's default printer
   const direct = printStatus?.enabled ? printStatus : null;
   const canGo = (traveler || (certAvailable && certification)) && printStatus !== undefined;
   const showingPreview = Boolean(previewUrls.traveler || previewUrls.cert);
@@ -52,7 +53,11 @@ export function PrintJobDialog({
     try {
       if (mode === "print" && direct) {
         // Server sends each document straight to the shop printer with its own sides setting.
-        await api.printJobDirect(jobNumber, { traveler, certification: certAvailable && certification });
+        await api.printJobDirect(jobNumber, {
+          traveler,
+          certification: certAvailable && certification,
+          printer: printer || null,
+        });
         onClose();
         return;
       }
@@ -123,7 +128,15 @@ export function PrintJobDialog({
               Print
             </label>
           </div>
-          {mode === "print" ? <DirectPrintNote status={printStatus} kinds={["traveler", "certification"]} /> : null}
+          {mode === "print" ? (
+            <DirectPrintNote
+              status={printStatus}
+              kinds={certAvailable ? ["traveler", "certification"] : ["traveler"]}
+              printer={printer}
+              onPrinter={setPrinter}
+              disabled={busy}
+            />
+          ) : null}
           {error ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p> : null}
           {showingPreview ? (
             <div className="space-y-3">

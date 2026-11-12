@@ -114,6 +114,25 @@ class JobPageOut(BaseModel):
     pictures: list[PartPictureOut] = Field(default_factory=list)
 
 
+class PriceMatrixRowOut(BaseModel):
+    id: int
+    quantity: int
+    price: Decimal
+    last_date: date | None = None
+    expiration_date: date | None = None
+    note: str | None = None
+    rowversion: str | None = None
+    expired: bool = False
+
+
+class PriceMatrixIn(BaseModel):
+    quantity: int = Field(ge=1, le=32767)  # Pmpm_Qty is a smallint
+    price: Decimal = Field(ge=0, le=Decimal("922337203685477"), decimal_places=4)
+    expiration_date: date | None = None
+    note: str | None = Field(default=None, max_length=500)
+    rowversion: str | None = None
+
+
 class PartEditorOut(BaseModel):
     pm_linkid: int
     part_number: str
@@ -131,6 +150,7 @@ class PartEditorOut(BaseModel):
     cert_library: list[CertTextOut] = Field(default_factory=list)
     work_centers: list[WorkCenterOut] = Field(default_factory=list)
     templates: list[OpTemplateOut] = Field(default_factory=list)
+    price_matrix: list[PriceMatrixRowOut] = Field(default_factory=list)
 
 
 class PartHeaderIn(BaseModel):
