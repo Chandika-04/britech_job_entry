@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { pictureFileName } from "@/lib/partPath";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
-import { cn } from "@/lib/utils";
+import { cn, handleEnterAdvance } from "@/lib/utils";
 import type { OperationRow, PartEditor, PartPicture } from "@/types/po";
 
 const PART_MAX = 30;
@@ -175,7 +175,8 @@ export function PartEditorPage() {
               <UnsavedBadge show={!isNew && headerDirty} />
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+          {/* Enter moves Part # → Rev → Customer → Description (Description keeps Enter for new lines). */}
+          <CardContent className="space-y-3 text-sm" data-enter-form onKeyDown={handleEnterAdvance}>
             {part?.locked ? <p className="text-amber-800">This part is locked. ShopKeeper will not accept edits.</p> : null}
             {part?.fa_hold || part?.ship_hold ? (
               <p className="text-muted">
@@ -207,7 +208,8 @@ export function PartEditorPage() {
               <CustomerCodeField value={customerCode} disabled={busy || locked} onChange={setCustomerCode} />
             </Field>
             <Field label="Description">
-              <Textarea
+              {/* One line (ShopKeeper allows 75 characters), so Enter can move to it from Customer. */}
+              <Input
                 maxLength={DESC_MAX}
                 disabled={busy || locked}
                 value={description}

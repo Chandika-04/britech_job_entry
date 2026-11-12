@@ -14,6 +14,12 @@ const SOURCE_LABELS: Record<string, string> = {
 
 const CURRENT_SOURCES = new Set(["contract", "matrix"]);
 
+// The second number stays available on hover: the customer PO for a past job, the quote # for a proposal.
+function referenceTitle(quote: PriceQuote): string | undefined {
+  if (!quote.po_number) return undefined;
+  return quote.source === "proposal" ? `Quote ${quote.po_number}` : `Customer PO ${quote.po_number}`;
+}
+
 function historyTime(quote: PriceQuote): number {
   if (!quote.order_date) return Number.NEGATIVE_INFINITY;
   const parsed = Date.parse(quote.order_date);
@@ -108,14 +114,16 @@ export function PriceLookup({
       </div>
       {showing && error ? <p className="text-xs text-muted">{error}</p> : null}
       {showing && quotes && quotes.length > 0 ? (
-        <div className="max-h-72 min-w-0 overflow-y-auto rounded-md border border-rule bg-white">
-          <table className="data-table wrap">
+        // Auto-width columns that never wrap; in a narrow spot (the Review page line details) the table
+        // scrolls sideways instead of squeezing Qty into the job number.
+        <div className="max-h-72 min-w-0 overflow-auto rounded-md border border-rule bg-white">
+          <table className="data-table [&_td]:whitespace-nowrap">
             <thead>
               <tr>
                 <th>Source</th>
                 <th className="num">Price</th>
                 <th className="num">Qty</th>
-                <th>Job / quote</th>
+                <th className="pl-5">Job / proposal #</th>
                 <th>Date</th>
                 {pickLabel && onPick ? <th /> : null}
               </tr>
@@ -143,17 +151,11 @@ export function PriceLookup({
                   <td>{SOURCE_LABELS[quote.source] ?? quote.source}</td>
                   <td className="num font-mono">{formatUsd(quote.unit_price)}</td>
                   <td className="num font-mono">{quote.quantity ?? "—"}</td>
-                  <td className="font-mono text-xs">
-                    {quote.job_number || quote.po_number ? (
-                      <>
-                        {quote.job_number || "—"}
-                        {quote.po_number ? <span className="text-muted"> / {quote.po_number}</span> : null}
-                      </>
-                    ) : (
-                      quote.note || "—"
-                    )}
+                  <td className="pl-5 font-mono text-xs" title={referenceTitle(quote)}>
+                    {/* One number: the job number for past jobs, the proposal number for proposals. */}
+                    {quote.job_number || quote.note || "—"}
                   </td>
-                  <td className="whitespace-nowrap font-mono text-xs text-muted">{formatDate(quote.order_date)}</td>
+                  <td className="whitespace-nowrap font-mono text-xs">{formatDate(quote.order_date)}</td>
                   {pickLabel && onPick ? (
                     <td>
                       <Button

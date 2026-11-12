@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 
 import { api } from "@/api/client";
 import { CustomerCodeField } from "@/components/po/CustomerCodeField";
@@ -83,9 +83,9 @@ export function PriceMatrixCard({
     }
   };
 
-  const add = async () => {
+  const add = async (draft: Draft = adding) => {
     if (!part) return;
-    const payload = toPayload(adding);
+    const payload = toPayload(draft);
     if (typeof payload === "string") {
       onError(payload);
       return;
@@ -95,9 +95,9 @@ export function PriceMatrixCard({
     }
   };
 
-  const save = async (row: PriceMatrixRow) => {
+  const save = async (row: PriceMatrixRow, draft: Draft = editing) => {
     if (!part) return;
-    const payload = toPayload(editing, row.rowversion);
+    const payload = toPayload(draft, row.rowversion);
     if (typeof payload === "string") {
       onError(payload);
       return;
@@ -118,10 +118,45 @@ export function PriceMatrixCard({
       className="h-8"
       value={draft[key]}
       disabled={off}
+      data-field={key}
       onChange={(event) => set({ ...draft, [key]: event.target.value })}
       {...props}
     />
   );
+
+  /**
+   * Enter in a price row: Qty → Price → Expires → Note. Enter on Note saves the row once Qty,
+   * Price and Expires are all filled; otherwise it goes back to the first empty one of those.
+   */
+  const rowEnter =
+    (draft: Draft, set: (next: Draft) => void, submit: (draft: Draft) => void) =>
+    (event: KeyboardEvent<HTMLTableRowElement>) => {
+      if (event.key !== "Enter" || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || !target.dataset.field) return;
+      event.preventDefault();
+      let next = draft;
+      if (target.dataset.field === "price") {
+        next = { ...draft, price: formatUsd(draft.price) || draft.price };
+        set(next);
+      }
+      const inputs = Array.from(event.currentTarget.querySelectorAll<HTMLInputElement>("input[data-field]")).filter(
+        (input) => !input.disabled,
+      );
+      const index = inputs.indexOf(target);
+      if (index < inputs.length - 1) {
+        const following = inputs[index + 1];
+        following.focus();
+        if (following.type !== "date") following.select();
+        return;
+      }
+      const missing = (["quantity", "price", "expires"] as const).find((key) => !next[key].trim());
+      if (!missing) {
+        submit(next);
+        return;
+      }
+      inputs.find((input) => input.dataset.field === missing)?.focus();
+    };
 
   return (
     <Card className={cn(!part && "opacity-50")}>
@@ -151,7 +186,7 @@ export function PriceMatrixCard({
             <tbody>
               {rows.map((row) =>
                 editingId === row.id ? (
-                  <tr key={row.id}>
+                  <tr key={row.id} onKeyDown={rowEnter(editing, setEditing, (draft) => void save(row, draft))}>
                     <td className="w-24">{field(editing, setEditing, "quantity", { inputMode: "numeric", className: "h-8 text-right font-mono" })}</td>
                     <td className="w-28">
                       {field(editing, setEditing, "price", {
@@ -211,7 +246,19 @@ export function PriceMatrixCard({
                   </td>
                 </tr>
               ) : null}
-              <tr className="bg-head/60">
+              <tr
+                className="bg-head/60"
+                data-add-row
+                onKeyDown={rowEnter(adding, setAdding, (draft) => {
+                  void add(draft).then(() => {
+                    // Ready for the next price: back to Qty.
+                    window.setTimeout(
+                      () => document.querySelector<HTMLInputElement>('tr[data-add-row] input[data-field="quantity"]')?.focus(),
+                      0,
+                    );
+                  });
+                })}
+              >
                 <td className="w-24">{field(adding, setAdding, "quantity", { inputMode: "numeric", placeholder: "Qty", className: "h-8 text-right font-mono" })}</td>
                 <td className="w-28">
                   {field(adding, setAdding, "price", {
@@ -233,7 +280,9 @@ export function PriceMatrixCard({
           </table>
         </div>
         <p className="text-xs text-muted">
-          New prices expire {readPriceExpiryDays()} days from today by default (change it in Settings). Clear the date for no expiry.
+          Enter moves Qty → Price → Expires → Note; Enter on Note saves the row once Qty, Price and Expires are filled. New
+          prices expire {readPriceExpiryDays()} days from today by default (change it in Settings). Clear the date for no
+          expiry and click Add price.
         </p>
 
         <div className="space-y-2 border-t border-rule-soft pt-3">
