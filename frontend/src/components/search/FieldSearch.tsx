@@ -17,7 +17,7 @@ export function FieldSearch({
 }) {
   const anyFilled = fields.some((field) => (values[field.key] ?? "").trim());
   return (
-    <div className="flex flex-col items-stretch gap-2 sm:items-end">
+    <div className="flex flex-col items-stretch gap-2 sm:items-end" data-list-search>
       <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:justify-end">
         {fields.map((field) => {
           const value = values[field.key] ?? "";

@@ -567,7 +567,7 @@ def _draw_shipper_header(page: fitz.Page, data: ShipperPrintData, page_no: int, 
     ship_no = _text(shipper.shipper_number)
     terms = _text(data.customer.payment_terms if data.customer else None)
 
-    _put(page, (37, 52), BRITECH_NAME, 13.5, face="arial")
+    _put(page, (37, 52), BRITECH_NAME, 13.5, face="arial-bold")  # company name stays bold
     _put(page, (37, 81), BRITECH_STREET, 9.5, face="arial")
     _put(page, (37, 94), BRITECH_CITY, 9.5, face="arial")
     _put(page, (37, 107), BRITECH_PHONE, 9.5, face="arial")

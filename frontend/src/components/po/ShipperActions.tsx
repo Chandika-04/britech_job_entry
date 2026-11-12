@@ -42,10 +42,7 @@ export function ShipperActions({
       preparedBy = await ensureInitials();
       if (!preparedBy) return;
     }
-    const confirmed = attaching
-      ? window.confirm(`Add the remaining jobs to shipper ${shipperNumber}, then print it?`)
-      : window.confirm("Create one shipper for all jobs on this PO, then print it?");
-    if (!confirmed) return;
+    // No confirm popup: the button label says what it does, and the print box that follows can be closed.
     setBusy(true);
     onError(null);
     try {

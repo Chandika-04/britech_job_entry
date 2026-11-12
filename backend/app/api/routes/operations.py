@@ -46,6 +46,7 @@ from app.services.shopkeeper.operations import (
     mark_shipper_printed,
     mark_traveler_printed,
     picture_path,
+    preview_picture_path,
     print_job,
     print_shipper,
     shipper_pdf,
@@ -238,6 +239,16 @@ def parts_create(payload: PartHeaderIn) -> PartEditorOut:
     return create_part(payload)
 
 
+_PREVIEW_CACHE = {"Cache-Control": "private, max-age=300"}
+
+
+# Registered before /parts/{pm_linkid} so "preview-picture" is not read as a part id.
+@router.get("/parts/preview-picture")
+def part_preview_by_number(part_number: str = Query(..., min_length=1), part_revision: str = Query("")) -> FileResponse:
+    """Small list preview: the part's traveler picture, looked up by part number and rev."""
+    return FileResponse(preview_picture_path(part_number=part_number, part_revision=part_revision), headers=_PREVIEW_CACHE)
+
+
 @router.get("/parts/{pm_linkid}", response_model=PartEditorOut)
 def part_editor(pm_linkid: int) -> PartEditorOut:
     return get_part_editor(pm_linkid)
@@ -300,6 +311,11 @@ def part_add_picture(pm_linkid: int, payload: LinkPictureIn) -> PartPictureOut:
 def part_unlink_picture(pm_linkid: int, pmp_id: int) -> PartEditorOut:
     unlink_picture(pm_linkid, pmp_id)
     return get_part_editor(pm_linkid)
+
+
+@router.get("/parts/{pm_linkid}/preview-picture")
+def part_preview_by_id(pm_linkid: int) -> FileResponse:
+    return FileResponse(preview_picture_path(pm_linkid=pm_linkid), headers=_PREVIEW_CACHE)
 
 
 @router.get("/parts/{pm_linkid}/pictures/{pmp_id}")

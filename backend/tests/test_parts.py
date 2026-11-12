@@ -221,3 +221,21 @@ def test_price_matrix_refuses_locked_part_and_bad_qty(client):
     fake.locked_parts.add(101)
     assert client.post("/api/parts/101/prices", json={"quantity": 5, "price": "1.00"}).status_code == 409
     assert client.post("/api/parts/102/prices", json={"quantity": 40000, "price": "1.00"}).status_code == 422
+
+
+def test_part_preview_picture_by_id_and_by_number(client, tmp_path):
+    fake = FakeShopKeeper.reset_shared()
+    image = tmp_path / "part.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    fake.add_part_picture(102, str(image), "sample")
+
+    by_id = client.get("/api/parts/102/preview-picture")
+    assert by_id.status_code == 200
+    assert by_id.content.startswith(b"\x89PNG")
+    assert "max-age" in by_id.headers["cache-control"]
+
+    by_number = client.get("/api/parts/preview-picture", params={"part_number": "4022.656.2799", "part_revision": "A"})
+    assert by_number.status_code == 200
+
+    assert client.get("/api/parts/103/preview-picture").status_code == 404  # no picture linked
+    assert client.get("/api/parts/preview-picture", params={"part_number": "NOPE"}).status_code == 404

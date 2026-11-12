@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Plus } from "lucide-react";
 
 import { api } from "@/api/client";
+import { PartPreview } from "@/components/po/PartPreview";
 import { FieldSearch } from "@/components/search/FieldSearch";
 import { Button } from "@/components/ui/button";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { useFieldQuery, type FieldSpec } from "@/lib/useFieldQuery";
+import { useListKeyboard } from "@/lib/useListKeyboard";
+import { cn } from "@/lib/utils";
 import type { PartListResponse, PartListRow } from "@/types/po";
 
 const PAGE_SIZE = 300;
@@ -19,6 +22,7 @@ const SEARCH_FIELDS: FieldSpec[] = [
 
 export function PartsPage() {
   useDocumentTitle(["Parts"]);
+  const navigate = useNavigate();
   const tableRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<PartListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +60,17 @@ export function PartsPage() {
   }, [requestKey, reload]);
 
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
+  const rows = data?.items ?? [];
+  // Up/Down highlights a part (and shows its picture above), Enter opens the part editor.
+  const { active, rowProps, rowClass } = useListKeyboard(
+    rows.length,
+    (index) => {
+      const row = rows[index];
+      if (row) navigate(`/parts/${row.pm_linkid}`, { state: { from: "parts", listSearch: search.listSearch } });
+    },
+    requestKey,
+  );
+  const activePart = active >= 0 ? rows[active] : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -65,6 +80,18 @@ export function PartsPage() {
           {data ? <span className="font-mono text-xs text-muted tabular-nums">{data.total} parts</span> : null}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+          <PartPreview
+            className="hidden md:flex"
+            target={
+              activePart
+                ? {
+                    pmLinkId: activePart.pm_linkid,
+                    hasPicture: activePart.picture_count > 0,
+                    label: `${activePart.part_number} rev ${activePart.part_revision || "-"}`,
+                  }
+                : null
+            }
+          />
           <FieldSearch fields={SEARCH_FIELDS} values={search.values} onChange={search.setField} onClearAll={search.clearAll} />
           <Button asChild>
             <Link to="/parts/new" state={{ from: "parts", listSearch: search.listSearch }}>
@@ -79,7 +106,7 @@ export function PartsPage() {
 
       <div ref={tableRef} className="min-h-0 flex-1 overflow-auto bg-white">
         {loading && !data ? <p className="px-4 py-6 text-[13px] text-muted">Loading…</p> : null}
-        {data && data.items.length > 0 ? <PartTable rows={data.items} listSearch={search.listSearch} /> : null}
+        {data && data.items.length > 0 ? <PartTable rows={rows} listSearch={search.listSearch} rowProps={rowProps} rowClass={rowClass} /> : null}
         {data && data.items.length === 0 ? (
           <p className="px-4 py-10 text-center text-[13px] text-muted">
             {search.anyFilled ? "No ShopKeeper parts match that search." : "No ShopKeeper parts found."}
@@ -109,7 +136,17 @@ export function PartsPage() {
   );
 }
 
-function PartTable({ rows, listSearch }: { rows: PartListRow[]; listSearch: string }) {
+function PartTable({
+  rows,
+  listSearch,
+  rowProps,
+  rowClass,
+}: {
+  rows: PartListRow[];
+  listSearch: string;
+  rowProps: (index: number) => object;
+  rowClass: (index: number) => string | undefined;
+}) {
   return (
     <table className="data-table">
       <thead>
@@ -125,8 +162,8 @@ function PartTable({ rows, listSearch }: { rows: PartListRow[]; listSearch: stri
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
-          <tr key={row.pm_linkid} className={row.inactive ? "text-muted" : undefined}>
+        {rows.map((row, index) => (
+          <tr key={row.pm_linkid} {...rowProps(index)} className={cn(row.inactive && "text-muted", rowClass(index))}>
             <td className="font-mono font-medium">
               <Link
                 className="text-accent hover:underline"

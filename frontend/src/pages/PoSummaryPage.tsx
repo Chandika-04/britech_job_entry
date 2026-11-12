@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 
 import { api } from "@/api/client";
@@ -9,7 +9,8 @@ import { rowsFromJobs, sortJobsByLine } from "@/lib/copyPoSummary";
 import type { JobNavState } from "@/lib/jobNav";
 import { poLabel, ShipperLink, splitShipperNumbers } from "@/lib/poSummary";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
-import { formatDate } from "@/lib/utils";
+import { useListKeyboard } from "@/lib/useListKeyboard";
+import { cn, formatDate } from "@/lib/utils";
 import type { ShopKeeperPoPage } from "@/types/po";
 
 export function PoSummaryPage() {
@@ -21,6 +22,7 @@ export function PoSummaryPage() {
   const [page, setPage] = useState<ShopKeeperPoPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   useDocumentTitle(["PO summary", customerCode, poNumber ? `PO ${poNumber}` : null]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!customerCode) {
@@ -65,6 +67,15 @@ export function PoSummaryPage() {
   };
   const jobs = sortJobsByLine(page?.jobs ?? []);
   const copyRows = rowsFromJobs(jobs);
+  // Up/Down highlights a job, Enter opens it.
+  const { rowProps, rowClass } = useListKeyboard(
+    jobs.length,
+    (index) => {
+      const job = jobs[index];
+      if (job) navigate(`/jobs/${encodeURIComponent(job.job_number)}`, { state: { ...shipNav } });
+    },
+    `|$poNumber`,
+  );
 
   return (
     <div className="space-y-4">
@@ -122,8 +133,8 @@ export function PoSummaryPage() {
                 </tr>
               </thead>
               <tbody>
-                {jobs.map((job) => (
-                  <tr key={job.job_number}>
+                {jobs.map((job, index) => (
+                  <tr key={job.job_number} {...rowProps(index)} className={cn(rowClass(index))}>
                     <td className="num font-mono tabular-nums">{job.po_line?.trim() || "—"}</td>
                     <td className="font-mono font-medium tabular-nums">
                       <Link

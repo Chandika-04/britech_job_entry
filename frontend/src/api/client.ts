@@ -391,6 +391,13 @@ export const api = {
   partPictureUrl(pmLinkId: number | string, pmpId: number) {
     return `${API_BASE}/api/parts/${pmLinkId}/pictures/${pmpId}`;
   },
+  partPreviewUrl(target: { pmLinkId?: number | null; partNumber?: string | null; partRevision?: string | null }) {
+    if (target.pmLinkId) return `${API_BASE}/api/parts/${target.pmLinkId}/preview-picture`;
+    const part = (target.partNumber || "").trim();
+    if (!part) return null;
+    const params = new URLSearchParams({ part_number: part, part_revision: (target.partRevision || "").trim() });
+    return `${API_BASE}/api/parts/preview-picture?${params.toString()}`;
+  },
   createShipper(poId: number | string, preparedBy?: string | null) {
     return request<PoDetail>(`/api/po/${poId}/create-shipper`, {
       method: "POST",
