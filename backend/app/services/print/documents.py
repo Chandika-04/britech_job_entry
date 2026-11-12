@@ -555,6 +555,18 @@ def _shipper_address(data: ShipperPrintData) -> list[str]:
     return lines[:6]
 
 
+def is_cod_terms(terms: str | None) -> bool:
+    """True for cash-on-delivery payment terms, however they are written (C.O.D., COD, cod ...)."""
+    letters = "".join(ch for ch in (terms or "").upper() if ch.isalpha())
+    return letters.startswith("COD")
+
+
+def _draw_cod_notice(page: fitz.Page) -> None:
+    # Same as ShopKeeper's COD packing list: two bold lines to the right of the SHIPPED TO box.
+    _put_center(page, 470, 222, "C.O.D. Must", 18, face="arial-bold")
+    _put_center(page, 470, 246, "Receive Check", 18, face="arial-bold")
+
+
 def _shipper_po_label(shipper) -> str:
     pos = [po.strip() for po in (shipper.po_numbers or "").split(",") if po.strip()]
     if not pos:
@@ -609,6 +621,8 @@ def _draw_shipper_header(page: fitz.Page, data: ShipperPrintData, page_no: int, 
     for i, line in enumerate(_shipper_address(data)):
         _put(page, (24, 181 + i * 14), _fit(line, 296, 9.5, face="arial-bold"), 9.5, face="arial-bold")  # ship-to stays bold
     _put(page, (52, 259), "Contact:", 9, face="arial")
+    if is_cod_terms(terms):
+        _draw_cod_notice(page)
 
 
 def _draw_shipper_table(page: fitz.Page, jobs: list) -> None:

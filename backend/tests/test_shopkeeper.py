@@ -876,3 +876,46 @@ def test_shipper_print_unknown_shipper_is_404(client):
     FakeShopKeeper.reset_shared()
     assert client.get("/api/shopkeeper/shippers/NOPE/print").status_code == 404
     assert client.post("/api/shopkeeper/shippers/NOPE/print/mark").status_code == 404
+
+
+def test_part_lookup_lists_newest_revision_first():
+    from app.services.shopkeeper.lookup import revision_rank, sort_parts_newest_rev_first
+    from app.services.shopkeeper.types import PartRecord
+
+    def part(number, rev):
+        return PartRecord(number, rev, None, "Production", 1, False)
+
+    def revs(rows):
+        return [(row.part_number, row.part_revision) for row in sort_parts_newest_rev_first(rows)]
+
+    assert revs([part("P1", "A"), part("P1", "C"), part("P1", "B")]) == [("P1", "C"), ("P1", "B"), ("P1", "A")]
+    numeric = revs([part("P1", "01"), part("P1", "10"), part("P1", "03"), part("P1", "2")])
+    assert numeric == [("P1", "10"), ("P1", "03"), ("P1", "2"), ("P1", "01")]  # 10 is newer than 2, not text order
+    # Part numbers stay A-Z; "-" (no revision) is oldest; letters rank above numbers.
+    assert revs([part("P2", "-"), part("P1", "A"), part("P2", "B"), part("P2", "1")]) == [
+        ("P1", "A"), ("P2", "B"), ("P2", "1"), ("P2", "-"),
+    ]
+    assert revision_rank("10") > revision_rank("9") > revision_rank("") 
+
+    FakeShopKeeper.reset_shared()
+    matches = lookup_parts("MULTI")["matches"]
+    assert [row["part_revision"] for row in matches] == ["B", "A"]
+
+
+def test_cod_customer_packing_list_says_must_receive_check(client):
+    from app.services.print.documents import is_cod_terms
+
+    assert all(is_cod_terms(value) for value in ("C.O.D.", "COD", "cod", " C.O.D ", "COD - cash"))
+    assert not any(is_cod_terms(value) for value in ("Net 30", "Credit Hold", "", None))
+
+    fake = FakeShopKeeper.reset_shared()
+    url = "/api/shopkeeper/shippers/S000012/print"
+    copies = {"copies": ["Customer Copy", "Shipping Dept Copy", "Office Copy"]}
+    normal = _pdf_pages(client.get(url, params=copies).content)
+    assert not any("Receive Check" in page for page in normal)
+
+    cortec = next(row for row in fake.customers if row.customer_number == "CORTEC")
+    cortec.payment_terms = "C.O.D."
+    cod = _pdf_pages(client.get(url, params=copies).content)
+    assert len(cod) == 3
+    assert all("C.O.D. Must" in page and "Receive Check" in page for page in cod)

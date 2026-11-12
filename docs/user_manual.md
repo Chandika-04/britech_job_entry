@@ -145,6 +145,8 @@ The shipper button sits in the bar at the bottom of the screen, next to **Save**
 
 When the server prints directly, every print box (traveler/cert and packing list) has a **Printer** list. It starts on **Default** (the shop printer set up for that document); pick another printer for just this print. Travelers still print front and back and everything else one side.
 
+For a customer whose ShopKeeper payment terms are **C.O.D.**, every copy of the packing list also prints **C.O.D. Must Receive Check** in large bold type next to the ship-to address, the same as ShopKeeper's own packing list.
+
 The print box lets you choose **Customer Copy**, **Shipping Dept Copy**, and **Office Copy** (each prints the full packing list with that label at the bottom; Customer and Shipping Dept are ticked to start, and this browser remembers what you pick), and **Print preview** or **Print**. After a real print, ShopKeeper marks the shipper printed. If printing fails, the shipper is still created; print it again with this button or **Print packing list** on the Shipper page. The button is greyed out until every line has a job (skipped lines count as not done).
 
 A yellow **Review warnings** box lists anything the app is unsure about. Examples are missing pages, handwriting it couldn't read, a missing quantity, or notes from the extraction such as "no unit price shown on this PO". Read these warnings before confirming.
