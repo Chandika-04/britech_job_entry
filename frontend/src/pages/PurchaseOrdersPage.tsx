@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "@/api/client";
+import { PartPreview } from "@/components/po/PartPreview";
 import { FieldSearch } from "@/components/search/FieldSearch";
 import { Button } from "@/components/ui/button";
 import { PoLink, ShipperLink } from "@/lib/poSummary";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { useFieldQuery, type FieldSpec } from "@/lib/useFieldQuery";
-import { formatDate } from "@/lib/utils";
+import { useListKeyboard } from "@/lib/useListKeyboard";
+import { cn, formatDate } from "@/lib/utils";
 import type { ShopKeeperJobRow, ShopKeeperPoListResponse } from "@/types/po";
 
 const PAGE_SIZE = 300;
@@ -21,6 +23,7 @@ const SEARCH_FIELDS: FieldSpec[] = [
 
 export function PurchaseOrdersPage() {
   useDocumentTitle(["ShopKeeper jobs"]);
+  const navigate = useNavigate();
   const tableRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<ShopKeeperPoListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +71,17 @@ export function PurchaseOrdersPage() {
       return b.job_number.localeCompare(a.job_number);
     });
   }, [data?.items, search.anyFilled]);
+  const nav = { from: "purchase-orders" as const, listSearch: search.listSearch };
+  // Up/Down highlights a job (and shows its part picture above), Enter opens the job.
+  const { active, rowProps, rowClass } = useListKeyboard(
+    jobs.length,
+    (index) => {
+      const job = jobs[index];
+      if (job) navigate(`/jobs/${encodeURIComponent(job.job_number)}`, { state: nav });
+    },
+    requestKey,
+  );
+  const activeJob = active >= 0 ? jobs[active] : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -76,14 +90,20 @@ export function PurchaseOrdersPage() {
           <h2 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink">ShopKeeper jobs</h2>
           {data ? <span className="font-mono text-xs text-muted tabular-nums">{data.total} jobs</span> : null}
         </div>
-        <FieldSearch fields={SEARCH_FIELDS} values={search.values} onChange={search.setField} onClearAll={search.clearAll} />
+        <div className="flex items-start gap-3">
+          <PartPreview
+            className="hidden md:flex"
+            target={activeJob ? { partNumber: activeJob.part_number, partRevision: activeJob.part_revision, label: `${activeJob.part_number} rev ${activeJob.part_revision || "-"}` } : null}
+          />
+          <FieldSearch fields={SEARCH_FIELDS} values={search.values} onChange={search.setField} onClearAll={search.clearAll} />
+        </div>
       </div>
 
       {error ? <div className="shrink-0 border border-red-200 bg-red-50 px-4 py-2 text-[13px] text-red-800">{error}</div> : null}
 
       <div ref={tableRef} className="min-h-0 flex-1 overflow-auto bg-white">
         {loading && !data ? <p className="px-4 py-6 text-[13px] text-muted">Loading…</p> : null}
-        {data && jobs.length > 0 ? <JobTable jobs={jobs} listSearch={search.listSearch} /> : null}
+        {data && jobs.length > 0 ? <JobTable jobs={jobs} nav={nav} rowProps={rowProps} rowClass={rowClass} /> : null}
         {data && data.items.length === 0 ? (
           <p className="px-4 py-10 text-center text-[13px] text-muted">
             {search.anyFilled ? "No ShopKeeper jobs match that search." : "No ShopKeeper jobs found."}
@@ -113,8 +133,17 @@ export function PurchaseOrdersPage() {
   );
 }
 
-function JobTable({ jobs, listSearch }: { jobs: ShopKeeperJobRow[]; listSearch: string }) {
-  const nav = { from: "purchase-orders" as const, listSearch };
+function JobTable({
+  jobs,
+  nav,
+  rowProps,
+  rowClass,
+}: {
+  jobs: ShopKeeperJobRow[];
+  nav: { from: "purchase-orders"; listSearch: string };
+  rowProps: (index: number) => object;
+  rowClass: (index: number) => string | undefined;
+}) {
   return (
     <table className="data-table">
       <thead>
@@ -132,8 +161,8 @@ function JobTable({ jobs, listSearch }: { jobs: ShopKeeperJobRow[]; listSearch: 
         </tr>
       </thead>
       <tbody>
-        {jobs.map((job) => (
-          <tr key={job.job_number}>
+        {jobs.map((job, index) => (
+          <tr key={job.job_number} {...rowProps(index)} className={cn(rowClass(index))}>
             <td className="font-mono font-medium tabular-nums">
               <Link
                 className="text-accent hover:underline"

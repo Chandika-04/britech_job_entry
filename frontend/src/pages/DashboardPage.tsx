@@ -11,7 +11,8 @@ import { JobsBadge, ReviewBadge, StatusBadge } from "@/components/po/StatusBadge
 import { hasWrongVendor } from "@/components/po/WarningsBanner";
 import { ShipperLink } from "@/lib/poSummary";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
-import { formatDate } from "@/lib/utils";
+import { useListKeyboard } from "@/lib/useListKeyboard";
+import { cn, formatDate } from "@/lib/utils";
 import type { PoListResponse, PoSummary } from "@/types/po";
 
 const LIST_POLL_MS = 5000;
@@ -144,6 +145,17 @@ export function DashboardPage() {
   };
 
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
+  const items = data?.items ?? [];
+  const openItem = (item: PoSummary) => navigate(item.source === "manual" ? `/manual/${item.id}` : `/po/${item.id}`);
+  // Up/Down highlights a PO, Enter opens it. The 5-second refresh keeps the highlight.
+  const { rowProps, rowClass } = useListKeyboard(
+    items.length,
+    (index) => {
+      const item = items[index];
+      if (item) openItem(item);
+    },
+    `${query}|${sort}|${order}|${page}`,
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -156,7 +168,7 @@ export function DashboardPage() {
           {data ? <span className="font-mono text-xs text-muted tabular-nums">{data.total} total</span> : null}
         </div>
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] md:w-[560px]">
-          <div className="relative">
+          <div className="relative" data-list-search>
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
             <Input
               ref={searchRef}
@@ -216,11 +228,12 @@ export function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {data.items.map((item) => (
+              {data.items.map((item, index) => (
                 <tr
                   key={item.id}
-                  className="cursor-pointer hover:bg-accent-soft/60"
-                  onClick={() => navigate(item.source === "manual" ? `/manual/${item.id}` : `/po/${item.id}`)}
+                  {...rowProps(index)}
+                  className={cn("cursor-pointer", rowClass(index))}
+                  onClick={() => openItem(item)}
                 >
                   <td className="font-mono font-medium">
                     <Link to={item.source === "manual" ? `/manual/${item.id}` : `/po/${item.id}`} className="text-accent hover:underline" onClick={(event) => event.stopPropagation()}>

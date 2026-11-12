@@ -97,6 +97,15 @@ textarea {
     background: rgb(16 185 129 / 0.08);
   }
 
+  /* Row highlighted with the Up/Down keys (or hover) on list pages; Enter opens it. */
+  .data-table tbody tr.is-active td {
+    background: var(--color-accent-soft);
+  }
+
+  .data-table tbody tr.is-active td:first-child {
+    box-shadow: inset 3px 0 0 var(--color-accent);
+  }
+
   .data-table tbody tr.pick-row.is-disabled {
     cursor: default;
   }

@@ -552,6 +552,39 @@ def picture_path(pm_linkid: int, pmp_id: int, provider: ShopKeeperProvider | Non
     return path
 
 
+def preview_picture_path(
+    pm_linkid: int | None = None,
+    part_number: str | None = None,
+    part_revision: str | None = None,
+    provider: ShopKeeperProvider | None = None,
+) -> Path:
+    """The part's traveler picture (first one set to print, else the first linked) for list previews.
+
+    Look up by Pm_LinkID, or by part number + rev (the jobs list only has those)."""
+    provider = provider or get_shopkeeper_provider()
+    if pm_linkid is None:
+        number = (part_number or "").strip()
+        if not number:
+            raise NotFoundError("Part not found.")
+        part = provider.get_part(number, (part_revision or "").strip() or "-")
+        if part is None:
+            raise NotFoundError("Part not found.")
+        pm_linkid = part.pm_linkid
+    editor = provider.get_part_editor(pm_linkid)
+    if editor is None:
+        raise NotFoundError("Part not found.")
+    pictures = sorted(editor.pictures, key=lambda pic: (not pic.print_on_trav, pic.sort_order or 0, pic.id))
+    for pic in pictures:
+        path = Path(pic.path)
+        try:
+            if path.is_file():
+                return path
+        except OSError:
+            # e.g. the PartPhotos share is unreachable or refuses this PC's login: treat as no picture.
+            continue
+    raise NotFoundError("No picture for this part.")
+
+
 def _print_readiness(
     provider: ShopKeeperProvider,
     job_number: str,

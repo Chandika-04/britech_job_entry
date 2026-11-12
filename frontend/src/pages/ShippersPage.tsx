@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { api } from "@/api/client";
 import { FieldSearch } from "@/components/search/FieldSearch";
@@ -6,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { PoNumberLinks, ShipperLink } from "@/lib/poSummary";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { useFieldQuery, type FieldSpec } from "@/lib/useFieldQuery";
-import { formatDate } from "@/lib/utils";
+import { useListKeyboard } from "@/lib/useListKeyboard";
+import { cn, formatDate } from "@/lib/utils";
 import type { ShopKeeperShipperListResponse, ShopKeeperShipperRow } from "@/types/po";
 
 const PAGE_SIZE = 300;
@@ -25,6 +27,7 @@ function statusLabel(row: ShopKeeperShipperRow): string {
 
 export function ShippersPage() {
   useDocumentTitle(["Shippers"]);
+  const navigate = useNavigate();
   const tableRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<ShopKeeperShipperListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +65,17 @@ export function ShippersPage() {
   }, [requestKey, reload]);
 
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
+  const rows = data?.items ?? [];
+  const nav = { from: "shippers" as const, listSearch: search.listSearch };
+  // Up/Down highlights a shipper, Enter opens it.
+  const { rowProps, rowClass } = useListKeyboard(
+    rows.length,
+    (index) => {
+      const row = rows[index];
+      if (row) navigate(`/shippers/${encodeURIComponent(row.shipper_number)}`, { state: nav });
+    },
+    requestKey,
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -77,7 +91,7 @@ export function ShippersPage() {
 
       <div ref={tableRef} className="min-h-0 flex-1 overflow-auto bg-white">
         {loading && !data ? <p className="px-4 py-6 text-[13px] text-muted">Loading…</p> : null}
-        {data && data.items.length > 0 ? <ShipperTable rows={data.items} listSearch={search.listSearch} /> : null}
+        {data && data.items.length > 0 ? <ShipperTable rows={rows} nav={nav} rowProps={rowProps} rowClass={rowClass} /> : null}
         {data && data.items.length === 0 ? (
           <p className="px-4 py-10 text-center text-[13px] text-muted">
             {search.anyFilled ? "No ShopKeeper shippers match that search." : "No ShopKeeper shippers found."}
@@ -107,8 +121,17 @@ export function ShippersPage() {
   );
 }
 
-function ShipperTable({ rows, listSearch }: { rows: ShopKeeperShipperRow[]; listSearch: string }) {
-  const nav = { from: "shippers" as const, listSearch };
+function ShipperTable({
+  rows,
+  nav,
+  rowProps,
+  rowClass,
+}: {
+  rows: ShopKeeperShipperRow[];
+  nav: { from: "shippers"; listSearch: string };
+  rowProps: (index: number) => object;
+  rowClass: (index: number) => string | undefined;
+}) {
   return (
     <table className="data-table">
       <thead>
@@ -123,8 +146,8 @@ function ShipperTable({ rows, listSearch }: { rows: ShopKeeperShipperRow[]; list
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
-          <tr key={row.shipper_number}>
+        {rows.map((row, index) => (
+          <tr key={row.shipper_number} {...rowProps(index)} className={cn(rowClass(index))}>
             <td className="font-mono font-medium tabular-nums">
               <ShipperLink number={row.shipper_number} state={nav} className="font-medium" />
             </td>

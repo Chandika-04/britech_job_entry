@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 
 import { api } from "@/api/client";
@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { JobNavState } from "@/lib/jobNav";
 import { PoLink, PoNumberLinks, poSummaryPath } from "@/lib/poSummary";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
-import { formatDate } from "@/lib/utils";
+import { useListKeyboard } from "@/lib/useListKeyboard";
+import { cn, formatDate } from "@/lib/utils";
 import type { ShopKeeperShipperPage } from "@/types/po";
 
 function shipperBack(nav: JobNavState | null): { to: string; label: string } {
@@ -37,6 +38,21 @@ export function ShipperPage() {
     shipper?.customer_code,
     shipperPos.length ? `PO ${shipperPos[0]}${shipperPos.length > 1 ? ` +${shipperPos.length - 1}` : ""}` : null,
   ]);
+  const navigate = useNavigate();
+  const shipperJobs = shipper?.jobs ?? [];
+  // Up/Down highlights a job on this shipper, Enter opens it.
+  const { rowProps, rowClass } = useListKeyboard(
+    shipperJobs.length,
+    (index) => {
+      const job = shipperJobs[index];
+      if (job && shipper) {
+        navigate(`/jobs/${encodeURIComponent(job.job_number)}`, {
+          state: { from: "shippers", shipNumber: shipper.shipper_number, listSearch: nav?.listSearch },
+        });
+      }
+    },
+    shipNumber,
+  );
 
   const load = useCallback(() => {
     if (!shipNumber) return;
@@ -124,8 +140,8 @@ export function ShipperPage() {
                 </tr>
               </thead>
               <tbody>
-                {shipper.jobs.map((job) => (
-                  <tr key={job.job_number}>
+                {shipper.jobs.map((job, index) => (
+                  <tr key={job.job_number} {...rowProps(index)} className={cn(rowClass(index))}>
                     <td className="font-mono font-medium tabular-nums">
                       <Link
                         className="text-accent hover:underline"
