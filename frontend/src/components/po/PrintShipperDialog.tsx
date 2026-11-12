@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { api } from "@/api/client";
 import { usePreparedBy } from "@/components/layout/PreparedBy";
@@ -115,7 +116,8 @@ export function PrintShipperDialog({
     }
   };
 
-  return (
+  // Rendered on <body> so a parent with blur/transform (the bottom action bar) cannot pin it in place.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
       <div
         className={cn(
@@ -182,6 +184,7 @@ export function PrintShipperDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

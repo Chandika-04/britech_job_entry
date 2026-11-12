@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -86,7 +87,8 @@ export function PrintJobDialog({
     }
   };
 
-  return (
+  // Rendered on <body> so a parent with blur/transform (the bottom action bar) cannot pin it in place.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
       <div
         className={cn(
@@ -172,6 +174,7 @@ export function PrintJobDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
