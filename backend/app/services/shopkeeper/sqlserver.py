@@ -482,7 +482,8 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
             if rev_pattern:
                 sql += " AND Pm_PartRev LIKE ?"
                 params.append(rev_pattern)
-            sql += " ORDER BY Pm_PartNum, Pm_PartRev"
+            # Highest revisions first so the newest survive the TOP limit; final order is set in writer.lookup_parts.
+            sql += " ORDER BY Pm_PartNum, Pm_PartRev DESC"
             rows = conn.cursor().execute(sql, *params).fetchall()
             return [_row_to_part(row) for row in rows]
         finally:

@@ -1,3 +1,4 @@
+import re
 from datetime import date
 
 from app.services.shopkeeper.types import (
@@ -37,6 +38,29 @@ def sort_price_history(quotes: list[PriceQuote]) -> list[PriceQuote]:
         ),
         reverse=True,
     )
+
+
+_REV_TOKEN = re.compile(r"\d+|[A-Za-z]+")
+
+
+def revision_rank(revision: str | None) -> tuple:
+    """Sort key where a higher value is a newer revision.
+
+    Numbers compare as numbers (2 < 10, 01 < 02) and letters alphabetically (A < B < C). When a part
+    mixes the two, letters count as newer (drawings commonly go 0, 1, 2 preliminary, then A, B, C
+    released). Blank or "-" (no revision) is oldest.
+    """
+    text = (revision or "").strip()
+    tokens = _REV_TOKEN.findall(text)
+    if not tokens:
+        return ((-1, ""),)
+    return tuple((1, token.upper()) if token.isalpha() else (0, int(token)) for token in tokens)
+
+
+def sort_parts_newest_rev_first(parts: list) -> list:
+    """Part numbers A-Z; within one part number, the newest revision first (C, B, A / 03, 02, 01)."""
+    by_rev = sorted(parts, key=lambda part: revision_rank(part.part_revision), reverse=True)
+    return sorted(by_rev, key=lambda part: (part.part_number or "").casefold())
 
 
 def pick_matrix_break(breaks: list, quantity: int, qty_of=lambda row: row[0]):

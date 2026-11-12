@@ -13,6 +13,7 @@ from app.models.erp_write_audit import ErpWriteAudit
 from app.models.po_line_item import PoLineItem
 from app.models.po_request import PoRequest, PoSource, ReviewState
 from app.services.extraction.warnings import refresh_duplicate_warnings
+from app.services.shopkeeper.lookup import sort_parts_newest_rev_first
 from app.services.shopkeeper.matching import MatchResult, match_customer, normalize
 from app.services.shopkeeper.provider import ShopKeeperProvider, get_shopkeeper_provider
 from app.services.shopkeeper.ops_util import note_to_shopkeeper_html
@@ -203,7 +204,9 @@ def save_customer_alias(db: Session, po: PoRequest, customer_number: str) -> Cus
 
 def lookup_parts(part_number: str, part_revision: str | None = None, provider: ShopKeeperProvider | None = None) -> dict:
     provider = provider or get_shopkeeper_provider()
-    matches = [_candidate_part(row) for row in provider.lookup_parts(part_number, part_revision)]
+    # Newest revision of each part first (C before A, 03 before 01).
+    parts = sort_parts_newest_rev_first(provider.lookup_parts(part_number, part_revision))
+    matches = [_candidate_part(row) for row in parts]
     return {
         "part_number": part_number,
         "part_revision": part_revision,
