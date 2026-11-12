@@ -46,7 +46,7 @@ git clone https://github.com/Chandika-04/britech_job_entry.git app
 cd app
 ```
 
-Git opens a browser window to sign in to GitHub the first time.
+The repository is public, so cloning and updating need no GitHub sign-in.
 
 ## 4. Install the Python packages
 
@@ -244,16 +244,80 @@ Notes:
 
 ## Updating to a new version
 
+**When:** after the changes are merged into `main` on GitHub. Until a pull request is merged, the
+warehouse PC does not get it.
+
+**First time only:** this script arrives with the update that adds it, so the very first time use
+"Doing it by hand" at the end of this section. After that, use the script.
+
+**How:** open PowerShell with **Run as administrator** and run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\BritechJobEntry\app\scripts\update.ps1
+```
+
+The script lists what is new and asks **Update now? (Y/N)**. The app is unavailable for about a
+minute while it updates, so pick a quiet moment. Then it, in order:
+
+1. stops the app,
+2. gets the new code,
+3. installs Python packages,
+4. rebuilds the website,
+5. starts the app and checks that it answers.
+
+Database changes are applied automatically when the app starts.
+
+**What you should see at the end:**
+
+```text
+UPDATED: 1a2b3c4  Add price matrix editing ...  (2026-11-12)
+If something is wrong with this version, go back with:
+  powershell -ExecutionPolicy Bypass -File "...\update.ps1" -ToCommit 9f8e7d6 -Yes
+```
+
+Keep that last line (it is also in the log) in case the new version has a problem.
+
+**Just looking:** add `-CheckOnly` to see what is new without changing anything.
+
+**If it stops with a red `UPDATE STOPPED:` line**, it says why and what to do. Common ones:
+
+| Message | What to do |
+|---|---|
+| `on branch '...', not 'main'` | Run the `git ... switch main` line it prints, then run the update again. |
+| `Files in the app folder were edited on this PC` | Someone edited app files here. If nobody meant to, run the `checkout` line it prints (your `.env` is safe), then update again. |
+| `Could not reach GitHub` | Check the internet connection, then try again. |
+| `scheduled task was not found` | The window is not an administrator window. Reopen PowerShell with Run as administrator. |
+| `UPDATE FAILED at: ...` | The script puts the previous version back and restarts it automatically. The shop keeps working; send the log file to whoever maintains the app. |
+| `The new version did not start` | Run the go-back line it prints, then send the newest `server-*.log` from `C:\BritechJobEntry\logs`. |
+
+Every run is logged to `C:\BritechJobEntry\logs\update-<date>-<time>.log`.
+
+**Going back to an earlier version:** run the go-back line printed by the update (or use the
+version id from the log):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\BritechJobEntry\app\scripts\update.ps1 -ToCommit 9f8e7d6 -Yes
+```
+
+The next normal update moves forward to the newest version again.
+
+<details>
+<summary>Doing it by hand (only if the script cannot run)</summary>
+
 ```powershell
 cd C:\BritechJobEntry\app
 powershell -ExecutionPolicy Bypass -File .\scripts\stop_server.ps1
 git pull
 .\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
-cd frontend; npm ci; npm run build; cd ..
+cd frontend
+npm ci
+npm run build
+cd ..
 Start-ScheduledTask "Britech Job Entry"
 ```
 
-Database changes are applied automatically when the server starts.
+Then check it with the health check in step 8.
+</details>
 
 ## Where things are
 
