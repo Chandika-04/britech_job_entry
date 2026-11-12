@@ -21,6 +21,7 @@ from app.schemas.operations import (
     PartHeaderIn,
     PartListResponse,
     PartPictureOut,
+    PriceMatrixIn,
     QualityHoldIn,
     WorkCenterOut,
 )
@@ -28,7 +29,10 @@ from app.services.po_service import get_po
 from app.services.print.printer import direct_print_status
 from app.services.shopkeeper.operations import (
     add_picture,
+    add_price,
     certification_pdf,
+    delete_price,
+    update_price,
     copy_part_instructions,
     copy_part_template,
     copy_template,
@@ -149,11 +153,13 @@ def job_mark_traveler(job_number: str, db: Session = Depends(get_db)) -> None:
 class DirectJobPrintIn(BaseModel):
     traveler: bool = True
     certification: bool = False
+    printer: str | None = None  # blank = each document's default printer
 
 
 class DirectShipperPrintIn(BaseModel):
     copies: list[str] | None = None
     prepared_by: str | None = None
+    printer: str | None = None
 
 
 class DirectPrintOut(BaseModel):
@@ -169,7 +175,13 @@ def print_status() -> dict:
 @router.post("/jobs/{job_number}/print/direct", response_model=DirectPrintOut)
 def job_print_direct(job_number: str, payload: DirectJobPrintIn, db: Session = Depends(get_db)) -> DirectPrintOut:
     try:
-        sent = print_job(db, job_number, traveler=payload.traveler, certification=payload.certification)
+        sent = print_job(
+            db,
+            job_number,
+            traveler=payload.traveler,
+            certification=payload.certification,
+            printer=payload.printer,
+        )
     finally:
         db.commit()
     return DirectPrintOut(sent=sent)
@@ -177,7 +189,9 @@ def job_print_direct(job_number: str, payload: DirectJobPrintIn, db: Session = D
 
 @router.post("/shopkeeper/shippers/{ship_number}/print/direct", response_model=DirectPrintOut)
 def shipper_print_direct(ship_number: str, payload: DirectShipperPrintIn) -> DirectPrintOut:
-    return DirectPrintOut(sent=print_shipper(ship_number, payload.copies, payload.prepared_by))
+    return DirectPrintOut(
+        sent=print_shipper(ship_number, payload.copies, payload.prepared_by, printer=payload.printer)
+    )
 
 
 @router.get("/shopkeeper/shippers/{ship_number}/print")
@@ -242,6 +256,21 @@ def part_save_ops(pm_linkid: int, payload: OperationsSaveIn) -> list[OperationOu
 @router.post("/parts/{pm_linkid}/copy-template", response_model=list[OperationOut])
 def part_copy_template(pm_linkid: int, payload: CopyTemplateIn) -> list[OperationOut]:
     return copy_part_template(pm_linkid, payload.template_id)
+
+
+@router.post("/parts/{pm_linkid}/prices", response_model=PartEditorOut, status_code=201)
+def part_add_price(pm_linkid: int, payload: PriceMatrixIn) -> PartEditorOut:
+    return add_price(pm_linkid, payload)
+
+
+@router.put("/parts/{pm_linkid}/prices/{pmpm_id}", response_model=PartEditorOut)
+def part_update_price(pm_linkid: int, pmpm_id: int, payload: PriceMatrixIn) -> PartEditorOut:
+    return update_price(pm_linkid, pmpm_id, payload)
+
+
+@router.delete("/parts/{pm_linkid}/prices/{pmpm_id}", response_model=PartEditorOut)
+def part_delete_price(pm_linkid: int, pmpm_id: int, rowversion: str | None = Query(None)) -> PartEditorOut:
+    return delete_price(pm_linkid, pmpm_id, rowversion)
 
 
 @router.post("/parts/{pm_linkid}/quality-hold", response_model=PartEditorOut)

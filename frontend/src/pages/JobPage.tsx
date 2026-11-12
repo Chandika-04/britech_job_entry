@@ -428,7 +428,8 @@ export function JobPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
-                  variant="outline"
+                  // Filled while the job has no operations (the usual next step); outline once any exist.
+                  variant={ops.length === 0 ? "default" : "outline"}
                   disabled={busy || !job.pm_linkid}
                   onClick={() => {
                     if (!window.confirm("Replace this job’s operations with the part master’s routing?")) return;
@@ -457,7 +458,8 @@ export function JobPage() {
                 </select>
                 <Button
                   size="sm"
-                  variant="outline"
+                  // Filled once a template is picked: it is not applied until this is clicked.
+                  variant={templateId ? "default" : "outline"}
                   disabled={busy || !templateId}
                   onClick={() => {
                     const template = job.templates.find((row) => String(row.id) === templateId);

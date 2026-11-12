@@ -223,6 +223,24 @@ def lookup_prices(
     return provider.lookup_prices(customer_number, part_number, part_revision, quantity)
 
 
+def suggest_price(
+    customer_number: str,
+    part_number: str,
+    part_revision: str,
+    quantity: int,
+    provider: ShopKeeperProvider | None = None,
+) -> PriceQuote | None:
+    """Price to autofill when a part is picked: the price-matrix break for this quantity
+    (see pick_matrix_break), otherwise the price on this customer's most recent job for the part.
+    Contract prices and proposals are not used."""
+    quotes = lookup_prices(customer_number, part_number, part_revision, quantity, provider)
+    matrix = next((quote for quote in quotes if quote.source == "matrix"), None)
+    if matrix is not None:
+        return matrix
+    history = [quote for quote in quotes if quote.source == "history"]
+    return history[0] if history else None
+
+
 def find_duplicates(po: PoRequest, line: PoLineItem, provider: ShopKeeperProvider | None = None) -> list[str]:
     provider = provider or get_shopkeeper_provider()
     previous = list(line.duplicate_job_numbers or [])

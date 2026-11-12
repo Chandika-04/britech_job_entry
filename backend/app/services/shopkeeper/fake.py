@@ -12,6 +12,7 @@ from app.services.shopkeeper.lookup import (
     paginate_jobs,
     paginate_parts,
     paginate_shippers,
+    pick_matrix_break,
     po_group_from_jobs,
     sort_price_history,
     starts_with,
@@ -30,6 +31,8 @@ from app.services.shopkeeper.types import (
     PartMasterListRow,
     PartPicture,
     PartRecord,
+    PriceMatrixRow,
+    PriceMatrixWrite,
     PriceQuote,
     PrintDocumentData,
     ShipWritePayload,
@@ -278,9 +281,12 @@ class FakeShopKeeper:
             {"customer": "BAYADV", "part": "SUB-BEC-12352-0016", "price": Decimal("9.25"), "note": "Contract"},
         ]
         self.matrix_prices = [
-            {"pm_linkid": 101, "qty": 1, "price": Decimal("10.00")},
-            {"pm_linkid": 101, "qty": 10, "price": Decimal("8.50")},
+            {"id": 1, "pm_linkid": 101, "qty": 1, "price": Decimal("10.00"), "last_date": date(2026, 1, 5),
+             "expires": None, "note": None, "version": 1},
+            {"id": 2, "pm_linkid": 101, "qty": 10, "price": Decimal("8.50"), "last_date": date(2026, 1, 5),
+             "expires": None, "note": None, "version": 1},
         ]
+        self.next_matrix_id = 100
         self.price_history = [
             PriceQuote(
                 source="history",
@@ -830,11 +836,15 @@ class FakeShopKeeper:
                 )
         part = self.get_part(part_number, part_revision)
         if part:
-            breaks = [row for row in self.matrix_prices if row["pm_linkid"] == part.pm_linkid]
+            today = date.today()
+            breaks = [
+                row
+                for row in self.matrix_prices
+                if row["pm_linkid"] == part.pm_linkid and (row.get("expires") is None or row["expires"] >= today)
+            ]
             if quantity is not None:
-                eligible = [row for row in breaks if row["qty"] <= quantity]
-                if eligible:
-                    best = max(eligible, key=lambda row: row["qty"])
+                best = pick_matrix_break(breaks, quantity, lambda row: row["qty"])
+                if best:
                     quotes.append(
                         PriceQuote(
                             source="matrix",
@@ -1165,6 +1175,70 @@ class FakeShopKeeper:
         if pm_linkid in self.locked_parts:
             raise AppError("This part is locked.", status_code=409)
         self.part_holds[pm_linkid] = {"hold": hold, "note": note}
+
+    def _writable_part(self, pm_linkid: int) -> None:
+        if self.get_part_editor(pm_linkid) is None:
+            raise AppError("Part not found.", status_code=404)
+        if pm_linkid in self.locked_parts:
+            raise AppError("This part is locked.", status_code=409)
+
+    def _matrix_row(self, pm_linkid: int, pmpm_id: int, rowversion: str | None) -> dict:
+        row = next(
+            (item for item in self.matrix_prices if item["id"] == pmpm_id and item["pm_linkid"] == pm_linkid),
+            None,
+        )
+        if row is None:
+            raise AppError("Price not found. Reload the part.", status_code=404)
+        if rowversion is not None and rowversion != str(row["version"]):
+            raise AppError("This price was changed by someone else. Reload and try again.", status_code=409)
+        return row
+
+    def list_price_matrix(self, pm_linkid: int) -> list[PriceMatrixRow]:
+        self.current_database()
+        rows = sorted(
+            (row for row in self.matrix_prices if row["pm_linkid"] == pm_linkid),
+            key=lambda row: (row["qty"], -(row.get("last_date") or date.min).toordinal(), -row["id"]),
+        )
+        return [
+            PriceMatrixRow(
+                id=row["id"],
+                quantity=row["qty"],
+                price=row["price"],
+                last_date=row.get("last_date"),
+                expiration_date=row.get("expires"),
+                note=row.get("note"),
+                rowversion=str(row.get("version", 1)),
+            )
+            for row in rows
+        ]
+
+    def add_price_matrix_row(self, pm_linkid: int, row: PriceMatrixWrite) -> int:
+        self.current_database()
+        self._writable_part(pm_linkid)
+        new_id = self.next_matrix_id
+        self.next_matrix_id += 1
+        self.matrix_prices.append(
+            {"id": new_id, "pm_linkid": pm_linkid, "qty": row.quantity, "price": row.price, "last_date": date.today(),
+             "expires": row.expiration_date, "note": row.note, "version": 1}
+        )
+        return new_id
+
+    def update_price_matrix_row(
+        self, pm_linkid: int, pmpm_id: int, row: PriceMatrixWrite, rowversion: str | None
+    ) -> None:
+        self.current_database()
+        self._writable_part(pm_linkid)
+        current = self._matrix_row(pm_linkid, pmpm_id, rowversion)
+        current.update(
+            qty=row.quantity, price=row.price, last_date=date.today(), expires=row.expiration_date, note=row.note,
+            version=current.get("version", 1) + 1,
+        )
+
+    def delete_price_matrix_row(self, pm_linkid: int, pmpm_id: int, rowversion: str | None) -> None:
+        self.current_database()
+        self._writable_part(pm_linkid)
+        current = self._matrix_row(pm_linkid, pmpm_id, rowversion)
+        self.matrix_prices.remove(current)
 
     def link_part_cert(self, pm_linkid: int, ctxt_id: str) -> None:
         self.current_database()

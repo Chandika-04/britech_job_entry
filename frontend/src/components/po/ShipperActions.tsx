@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Printer, Truck } from "lucide-react";
 
 import { api } from "@/api/client";
 import { usePreparedBy } from "@/components/layout/PreparedBy";
@@ -17,9 +16,12 @@ export function ShipperActions({
   onChangePo,
   onError,
   onNotice,
+  inActionBar = false,
 }: {
   po: PoDetail;
   disabled?: boolean;
+  /** Sized to match the Save / PO is correct buttons in the page's bottom bar. */
+  inActionBar?: boolean;
   onChangePo: (po: PoDetail) => void;
   onError: (message: string | null) => void;
   onNotice: (message: string | null) => void;
@@ -29,6 +31,8 @@ export function ShipperActions({
   const [printing, setPrinting] = useState<{ shipNumber: string; intro?: string } | null>(null);
 
   const shipperNumber = po.shipper_number;
+  const size = inActionBar ? "default" : "sm";
+  const barClass = inActionBar ? "min-h-12 flex-1 md:min-h-0 md:flex-none" : undefined;
   const lineCount = po.line_items.length;
 
   const createOrAttach = async () => {
@@ -64,33 +68,29 @@ export function ShipperActions({
     button = (
       <Button
         type="button"
-        size="sm"
+        size={size} className={barClass}
         variant="outline"
         disabled
         title={`Create every job first (${po.jobs_created_count} of ${lineCount} done). Skipped lines count as not done.`}
       >
-        <Truck className="h-3.5 w-3.5" />
         Create shipper and print
       </Button>
     );
   } else if (!shipperNumber) {
     button = (
-      <Button type="button" size="sm" disabled={disabled || busy} onClick={() => void createOrAttach()}>
-        <Truck className="h-3.5 w-3.5" />
+      <Button type="button" size={size} className={barClass} disabled={disabled || busy} onClick={() => void createOrAttach()}>
         {busy ? "Creating…" : "Create shipper and print"}
       </Button>
     );
   } else if (po.shipper_needs_attach) {
     button = (
-      <Button type="button" size="sm" disabled={disabled || busy} onClick={() => void createOrAttach()}>
-        <Truck className="h-3.5 w-3.5" />
+      <Button type="button" size={size} className={barClass} disabled={disabled || busy} onClick={() => void createOrAttach()}>
         {busy ? "Adding…" : `Add to shipper ${shipperNumber} and print`}
       </Button>
     );
   } else {
     button = (
-      <Button type="button" size="sm" variant="outline" onClick={() => setPrinting({ shipNumber: shipperNumber })}>
-        <Printer className="h-3.5 w-3.5" />
+      <Button type="button" size={size} className={barClass} variant="outline" onClick={() => setPrinting({ shipNumber: shipperNumber })}>
         Print shipper {shipperNumber}
       </Button>
     );

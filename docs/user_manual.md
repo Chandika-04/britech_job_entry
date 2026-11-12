@@ -45,7 +45,7 @@ Use this when there is no usable PDF (phone call, email, handwritten note).
 2. **Match the ShopKeeper customer** at the top of PO information: type a customer number or company name. Matches that **start with** what you typed appear as you type. Press **Enter** to take the first match, or click the row. That fills customer name, bill-to, and ship-to, then moves to **PO #** (dates default to today).
 3. On each **line**, type a part number (and rev if you want). Matching ShopKeeper parts that **start with** that number appear as you type. Press **Enter** to take the first match, or click the row. That fills part number, revision, and description, then moves to qty. Press **Enter** in any other field to keep what you typed and move to the next field. Unit price is stored as US dollars (`$0.00`). Click **Add line** for more — **Save** copies the ShopKeeper customer from the other lines.
 4. Click **Save** when you want it on the work list. That also marks it checked so ready lines can **Create job**.
-5. Optional **Look up a past price** after the customer and part are chosen. It shows contract and matrix prices, then a scrollable list of ShopKeeper jobs and proposals, **newest first**, each with a date. Click a price row, then **Save** again if you want to keep it.
+5. **The unit price fills in by itself** once the customer, the part, and the quantity are set (see **Automatic price** below). Optional **Look up a past price** after the customer and part are chosen. It shows contract and matrix prices, then a scrollable list of ShopKeeper jobs and proposals, **newest first**, each with a date. Click a price row, then **Save** again if you want to keep it.
 6. Set **Cert** if needed (customer default, then per line or **Certs for all lines**).
 7. **Create job and print** on each ready line. If the job has no operations, a warning opens the job page so you can add steps or copy a template. If a certificate is required but the part has none, the warning opens the part editor so you can pick a certification from the dropdown. Print from the job page after you fix it.
 
@@ -109,7 +109,11 @@ This tab is the ShopKeeper **part master**. Search existing parts, open one to e
 
 1. Open **Parts**. The newest parts appear first.
 2. Type into the **Part number**, **Customer**, and **Description** boxes. Filled boxes combine. Results update as you type.
-3. Click a **Part #** to open the part editor. Edit part number, rev (blank saves as `-`), customer code, and description, then **Save part details**. Below that: **operations** (copied onto new jobs), **traveler picture** (link a file already on the PartPhotos share; the app does not copy it), **certification** link, and **quality hold**. Price matrix is shown as a placeholder until pricing is standardized.
+3. Click a **Part #** to open the part editor. Edit part number, rev (blank saves as `-`), customer code, and description, then **Save part details**. Below that: **operations** (copied onto new jobs), **traveler picture** (link a file already on the PartPhotos share; the app does not copy it), **certification** link, **quality hold**, and the **price matrix**.
+
+**Price matrix:** each row is a quantity break with its price per piece. An order uses the row with the smallest quantity at or above the order quantity, or the top row when the order is bigger than every row (rows 1, 5, 10: qty 2–5 uses the 5 price, qty 6+ the 10 price). Fill in the bottom row (qty, price, expiry, optional note) and click **Add price**; **Edit** and **Delete** change a row. The entered date is set to today. The expiry date starts at today plus the number of days set in **Settings** (365 unless changed); clear it for no expiry. A quantity can have only one current price, so to change it edit that row (or let it expire and add a new one). Expired rows stay in gray as history and are skipped by price lookup. Changes save straight to ShopKeeper.
+
+**Price lookup** under the matrix shows contract, matrix, past-job, and proposal prices for this part. It starts with the part's customer; pick another customer to see what they were charged, and enter a quantity to see the matrix price that applies to it.
 4. Click **New part** to create a part. Part number and customer code are required. Rev defaults to `-`. Description defaults to the part number if you leave it blank. After create, the editor opens so you can add operations, a picture, and a cert.
 5. Use **Previous** / **Next** to move 300 parts at a time.
 
@@ -131,13 +135,15 @@ The review page shows the **original PDF** on the left and a **PO header** plus 
 
 If a shipper already exists for this PO, a green **Shipper created** box appears above the warnings and shows the ShopKeeper shipper number.
 
-### Shipper button (top right)
+### Shipper button (bottom bar)
 
-Once every line has a job, the shipper button at the top of the page works like the Work list's, then prints the packing list:
+The shipper button sits in the bar at the bottom of the screen, next to **Save** and **PO is correct** (next to **Save** on a typed-in PO). Once every line has a job, it works like the Work list's button, then prints the packing list:
 
 - **Create shipper and print** makes one ShopKeeper shipper for all jobs on the PO (it asks for your **Prepared by** initials if they are not set), then opens the print box.
 - **Add to shipper N and print** appears when a job was created after the shipper. It adds that job to the same shipper and opens the print box.
 - **Print shipper N** reprints when every job is already on the shipper.
+
+When the server prints directly, every print box (traveler/cert and packing list) has a **Printer** list. It starts on **Default** (the shop printer set up for that document); pick another printer for just this print. Travelers still print front and back and everything else one side.
 
 The print box lets you choose **Customer Copy**, **Shipping Dept Copy**, and **Office Copy** (each prints the full packing list with that label at the bottom; Customer and Shipping Dept are ticked to start, and this browser remembers what you pick), and **Print preview** or **Print**. After a real print, ShopKeeper marks the shipper printed. If printing fails, the shipper is still created; print it again with this button or **Print packing list** on the Shipper page. The button is greyed out until every line has a job (skipped lines count as not done).
 
@@ -171,7 +177,14 @@ Click a cell to type. The highlighted row (accent bar) is the line you are on. O
 |---|---|
 | **Qty** | The quantity exactly as stated on the PO, including lot lines (sometimes 1, sometimes the real piece count). **0 means the PO didn't state a quantity**: check the PO and enter the right number. A job can't be created with 0. |
 | **Unit** | **Each** or **Lot** only. Lot is used when the line is priced as a lot charge. This is the unit ShopKeeper uses to apply the price. |
-| **Unit price** | The price as stated on the PO, shown as US dollars (`$12.50`). Leave the field to format what you typed. For lot-priced lines this is the lot charge; it is never divided by the quantity. Blank means the PO showed no price: enter it before creating the job. If you pick a past price, it shows in the theme color with "Changed from $X on the PO." |
+| **Unit price** | The price as stated on the PO, shown as US dollars (`$12.50`). Leave the field to format what you typed. For lot-priced lines this is the lot charge; it is never divided by the quantity. Blank means the PO showed no price: enter it before creating the job (or pick the part and it fills in; see **Automatic price** below). If you pick a past price, it shows in the theme color with "Changed from $X on the PO." |
+
+**Automatic price.** When you pick a line's ShopKeeper part, or change its quantity afterwards, an **empty** unit price fills in by itself:
+
+1. **Price matrix first**, by quantity: the part's unexpired row with the smallest quantity at or above the line's quantity, or the top row if the quantity is above them all. With rows 1, 5, and 10: qty 1 uses the 1 price, qty 2–5 the 5 price, qty 6 and up the 10 price.
+2. **Otherwise the last price used**: the price on this customer's most recent ShopKeeper job for the same part and rev.
+
+A green note shows where the price came from. It never replaces a price from the PO or one you typed; if it filled the price and you then change the quantity, it updates its own price. Contract prices and proposals are not used for this (they still show in **Price lookup**). Save to keep the price.
 | **Due** | Always **today's date** (the day the PO was extracted), whatever date the PO shows. Change it here if a line needs a different date. |
 
 **Expedite fees** become their own line (and their own job) with the part number **EXPEDITE**. If the PO shows the fee amount it's filled in; otherwise enter the amount you've calculated. When matching the part in ShopKeeper, search for the expedite part by name if **EXPEDITE** doesn't find it.

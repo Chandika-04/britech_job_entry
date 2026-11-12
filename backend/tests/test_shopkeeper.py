@@ -841,8 +841,9 @@ def test_shipper_print_builds_sk055_packing_list(client):
     pages = _pdf_pages(response.content)
     assert len(pages) == 1
     text = pages[0]
-    for expected in ("Packing List", "S000012", "PO-8802", "MULTI-REV", "199201 Rel 1", "Office Copy", "SK055 Rev B"):
+    for expected in ("Packing List", "S000012", "PO-8802", "MULTI-REV", "199201 Rel 1", "Office Copy"):
         assert expected in text
+    assert "SK055" not in text
 
 
 def test_shipper_print_defaults_to_customer_and_shipping_copies_and_marks_printed(client):

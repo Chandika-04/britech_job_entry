@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { api } from "@/api/client";
 import { PrintShipperDialog } from "@/components/po/PrintShipperDialog";
@@ -86,7 +86,6 @@ export function ShipperPage() {
                 disabled={shipper.job_count === 0}
                 onClick={() => setPrinting(true)}
               >
-                <Printer className="h-3.5 w-3.5" />
                 Print packing list
               </Button>
             </CardTitle>

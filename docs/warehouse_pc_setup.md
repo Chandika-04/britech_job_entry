@@ -232,6 +232,9 @@ Notes:
 - The app runs from the scheduled task even when nobody is signed in, so the printer must be
   installed for that Windows user (step 2 lists what it can see). A printer shared from another
   PC may not show up when nobody is signed in; a printer added by its own IP address does.
+- The print box has a **Printer** list of every printer this PC (that user) can print to. It starts on
+  **Default**, which is the printer set in `.env` for each document; picking another printer sends
+  that print there with the same sides setting. The list refreshes about once a minute.
 - Copies or a paper tray can be added to the settings, e.g. `SHIPPER_PRINT_SETTINGS=simplex,2x`
   or `CERT_PRINT_SETTINGS=simplex,bin=2`.
 - **Print preview** in the app still opens the PDF in the browser, and leaving

@@ -18,6 +18,7 @@ import { CopyPoSummaryButton } from "@/components/po/CopyPoSummaryButton";
 import { ShipperActions } from "@/components/po/ShipperActions";
 import { rowsFromDraft } from "@/lib/copyPoSummary";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
+import { describeSuggestion, usePriceAutofill } from "@/lib/usePriceAutofill";
 import { cn, formatQty, formatUsd, handleEnterAdvance } from "@/lib/utils";
 import type { CreatePrintResult, LineItemDraft, PartCandidate, PoDetail, PoDraft } from "@/types/po";
 
@@ -416,6 +417,35 @@ export function ReviewPage() {
 
   useDocumentTitle([po?.po_number ? `PO ${po.po_number}` : "PO", po ? poCustomerCode(po) || po.customer_name : null]);
 
+  // Fill an empty unit price when a line's part is picked or its qty changes (matrix break, else last job price).
+  usePriceAutofill(
+    (draft?.line_items ?? []).map((item, index) => {
+      const line = po?.line_items.find((row) => row.id === item.id);
+      return {
+        key: item.id != null ? String(item.id) : `new-${index}`,
+        label: item.line_number || String(index + 1),
+        customer: line?.resolved_customer_code || (po ? poCustomerCode(po) : null),
+        part: line?.resolved_part_number,
+        rev: line?.resolved_part_revision,
+        quantity: item.quantity,
+        price: item.unit_price,
+      };
+    }),
+    (target, price, quote) => {
+      setDraft((current) =>
+        current
+          ? {
+              ...current,
+              line_items: current.line_items.map((item, index) =>
+                (item.id != null ? String(item.id) : `new-${index}`) === target.key ? { ...item, unit_price: price } : item,
+              ),
+            }
+          : current,
+      );
+      setNotice(`Line ${target.label}: price ${price} filled from the ${describeSuggestion(quote)}. Save to keep it.`);
+    },
+  );
+
   if (error && !po) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
@@ -451,7 +481,6 @@ export function ReviewPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <ShipperActions po={po} disabled={busy} onChangePo={setPo} onError={setError} onNotice={setNotice} />
           {draft ? <CopyPoSummaryButton rows={rowsFromDraft(draft.line_items)} /> : null}
           <StatusBadge status={po.status} source={po.source} />
           <ReviewBadge state={po.review_state} />
@@ -605,7 +634,15 @@ export function ReviewPage() {
           >
             {statusNote}
           </p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <ShipperActions
+              po={po}
+              disabled={busy}
+              onChangePo={setPo}
+              onError={setError}
+              onNotice={setNotice}
+              inActionBar
+            />
             <Button
               variant="outline"
               className="min-h-12 flex-1 md:min-h-0 md:flex-none"

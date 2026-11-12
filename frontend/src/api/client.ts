@@ -14,6 +14,8 @@ import type {
   PoDraft,
   PoListResponse,
   PriceLookupResponse,
+  PriceMatrixPayload,
+  PriceQuote,
   PrintStatus,
   ShopKeeperPoListResponse,
   ShopKeeperPoPage,
@@ -169,6 +171,15 @@ export const api = {
     if (qty) params.set("quantity", qty);
     return request<PriceLookupResponse>(`/api/shopkeeper/prices?${params.toString()}`);
   },
+  suggestPrice(customerNumber: string, partNumber: string, partRevision: string, quantity: number) {
+    const params = new URLSearchParams({
+      customer_number: customerNumber,
+      part_number: partNumber,
+      part_revision: partRevision,
+      quantity: String(quantity),
+    });
+    return request<PriceQuote | null>(`/api/shopkeeper/prices/suggest?${params.toString()}`);
+  },
   listShopKeeperPurchaseOrders(params: URLSearchParams) {
     return request<ShopKeeperPoListResponse>(`/api/shopkeeper/purchase-orders?${params.toString()}`);
   },
@@ -280,18 +291,18 @@ export const api = {
   getPrintStatus() {
     return request<PrintStatus>("/api/print/status");
   },
-  printJobDirect(jobNumber: string, documents: { traveler: boolean; certification: boolean }) {
+  printJobDirect(jobNumber: string, documents: { traveler: boolean; certification: boolean; printer?: string | null }) {
     return request<DirectPrintResult>(`/api/jobs/${encodeURIComponent(jobNumber)}/print/direct`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(documents),
     });
   },
-  printShipperDirect(shipNumber: string, copies: string[], preparedBy?: string | null) {
+  printShipperDirect(shipNumber: string, copies: string[], preparedBy?: string | null, printer?: string | null) {
     return request<DirectPrintResult>(`/api/shopkeeper/shippers/${encodeURIComponent(shipNumber)}/print/direct`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ copies, prepared_by: preparedBy ?? null }),
+      body: JSON.stringify({ copies, prepared_by: preparedBy ?? null, printer: printer || null }),
     });
   },
   markShipperPrinted(shipNumber: string) {
@@ -330,6 +341,25 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ template_id: templateId }),
     });
+  },
+  addPartPrice(pmLinkId: number | string, payload: PriceMatrixPayload) {
+    return request<PartEditor>(`/api/parts/${pmLinkId}/prices`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+  updatePartPrice(pmLinkId: number | string, pmpmId: number, payload: PriceMatrixPayload) {
+    return request<PartEditor>(`/api/parts/${pmLinkId}/prices/${pmpmId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+  deletePartPrice(pmLinkId: number | string, pmpmId: number, rowversion: string | null) {
+    const params = new URLSearchParams();
+    if (rowversion) params.set("rowversion", rowversion);
+    return request<PartEditor>(`/api/parts/${pmLinkId}/prices/${pmpmId}?${params.toString()}`, { method: "DELETE" });
   },
   setQualityHold(pmLinkId: number | string, hold: boolean, note?: string | null) {
     return request<PartEditor>(`/api/parts/${pmLinkId}/quality-hold`, {

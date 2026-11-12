@@ -10,6 +10,8 @@ export interface PrintStatus {
   enabled: boolean;
   reason: string | null;
   documents: Record<PrintDocKind, { printer: string; settings: string; description: string }>;
+  /** Printers on the server PC; the .env defaults come first. */
+  printers: string[];
 }
 
 export interface DirectPrintResult {
@@ -386,7 +388,27 @@ export interface JobPage {
   pictures: PartPicture[];
 }
 
+export interface PriceMatrixRow {
+  id: number;
+  quantity: number;
+  price: string;
+  last_date: string | null;
+  expiration_date: string | null;
+  note: string | null;
+  rowversion: string | null;
+  expired: boolean;
+}
+
+export interface PriceMatrixPayload {
+  quantity: number;
+  price: string;
+  expiration_date: string | null;
+  note: string | null;
+  rowversion?: string | null;
+}
+
 export interface PartEditor {
+  price_matrix: PriceMatrixRow[];
   pm_linkid: number;
   part_number: string;
   part_revision: string;

@@ -333,8 +333,7 @@ def _draw_operations_header(page: fitz.Page, y: float) -> float:
     return bottom + 6
 
 
-def _draw_footer(page: fitz.Page, form: str, page_no: int, page_count: int) -> None:
-    _put(page, (LEFT, 743), form, 8)
+def _draw_footer(page: fitz.Page, page_no: int, page_count: int) -> None:
     _put(page, (163, 743), BRITECH_NAME, 9)
     _put(page, (318, 743), _now_stamp(), 8)
     _put(page, (500, 743), f"Page {page_no} of {page_count}", 9)
@@ -403,13 +402,13 @@ def build_traveler_pdf(data: PrintDocumentData) -> bytes:
             if y + 70 > 730:
                 break
             y += _draw_operation(page, y, op, _text(job.job_number))
-        _draw_footer(page, "SK066 Rev C", index + 1, page_count)
+        _draw_footer(page, index + 1, page_count)
     if content_pages % 2 == 1:
         page = doc.new_page(width=PAGE_W, height=PAGE_H)
         _draw_traveler_identity(page, job)
         _draw_traveler_job_fields(page, job, data)
         _fill(page, fitz.Rect(21, 163, RIGHT, 166), GRAY)
-        _draw_footer(page, "SK066 Rev C", page_count, page_count)
+        _draw_footer(page, page_count, page_count)
     pdf = doc.tobytes()
     doc.close()
     return pdf
@@ -481,7 +480,6 @@ def build_certification_pdf(data: PrintDocumentData) -> bytes:
     _put(page, (48, methods.y0 + 50), "ABOVE SELECTED PROCESS IS ROHS COMPLIANT", 9, bold=True)
 
     _line(page, 33, 727, 573, 727, 0.8)
-    _put(page, (36, 740), "SK064 Rev B", 8)
     _put(page, (36, 752), _now_stamp(), 8)
     _put(page, (250, 752), "Customer Copy", 13, bold=True)
     _put(page, (500, 748), "Page 1", 10)
@@ -569,10 +567,10 @@ def _draw_shipper_header(page: fitz.Page, data: ShipperPrintData, page_no: int, 
     ship_no = _text(shipper.shipper_number)
     terms = _text(data.customer.payment_terms if data.customer else None)
 
-    _put(page, (37, 52), BRITECH_NAME, 13.5, face="arial-bold")
-    _put(page, (37, 81), BRITECH_STREET, 9.5, face="arial-bold")
-    _put(page, (37, 94), BRITECH_CITY, 9.5, face="arial-bold")
-    _put(page, (37, 107), BRITECH_PHONE, 9.5, face="arial-bold")
+    _put(page, (37, 52), BRITECH_NAME, 13.5, face="arial")
+    _put(page, (37, 81), BRITECH_STREET, 9.5, face="arial")
+    _put(page, (37, 94), BRITECH_CITY, 9.5, face="arial")
+    _put(page, (37, 107), BRITECH_PHONE, 9.5, face="arial")
 
     # Packing List box: 3 rows x (Terms | Contact | Ship column)
     x0, x1, x2, x3 = 339.0, 436.0, 501.0, 592.0
@@ -583,34 +581,34 @@ def _draw_shipper_header(page: fitz.Page, data: ShipperPrintData, page_no: int, 
     _line(page, x0, y2, x3, y2, 0.6)
     _line(page, x2, y0, x2, y3, 0.6)
     _line(page, x1, y1, x1, y3, 0.6)
-    _put_center(page, (x0 + x2) / 2, 39, "Packing List", 12, face="arial-bold")
+    _put_center(page, (x0 + x2) / 2, 39, "Packing List", 12, face="arial")
     _put(page, (x2 + 3, y0 + 6), "Ship Number", 5.5, face="arial")
-    _put_center(page, (x2 + x3) / 2, 42, ship_no, 13, face="arial-bold")
+    _put_center(page, (x2 + x3) / 2, 42, ship_no, 13, face="arial")
 
     _put(page, (x0 + 3, y1 + 6), "Terms", 5.5, face="arial")
-    _put_center(page, (x0 + x1) / 2, 66, _fit(terms, x1 - x0 - 6, 9, face="arial-bold"), 9, face="arial-bold")
+    _put_center(page, (x0 + x1) / 2, 66, _fit(terms, x1 - x0 - 6, 9, face="arial"), 9, face="arial")
     _put(page, (x1 + 3, y1 + 6), "Contact", 5.5, face="arial")
     _put(page, (x2 + 3, y1 + 6), "Ship Date", 5.5, face="arial")
-    _put_center(page, (x2 + x3) / 2 + 8, 67, _date(shipper.ship_date or date.today()), 9, face="arial-bold")
+    _put_center(page, (x2 + x3) / 2 + 8, 67, _date(shipper.ship_date or date.today()), 9, face="arial")
 
     po_label = _shipper_po_label(shipper)
     _put(page, (x0 + 3, y2 + 6), "PO Number", 5.5, face="arial")
-    _put_center(page, (x0 + x1) / 2, 93, _fit(po_label, x1 - x0 - 6, 9, face="arial-bold"), 9, face="arial-bold")
+    _put_center(page, (x0 + x1) / 2, 93, _fit(po_label, x1 - x0 - 6, 9, face="arial"), 9, face="arial")
     _put(page, (x1 + 3, y2 + 6), "Shipped Via", 5.5, face="arial")
-    _put_center(page, (x1 + x2) / 2, 93, _fit(_text(shipper.ship_via), x2 - x1 - 6, 8, face="arial-bold"), 8, face="arial-bold")
+    _put_center(page, (x1 + x2) / 2, 93, _fit(_text(shipper.ship_via), x2 - x1 - 6, 8, face="arial"), 8, face="arial")
     _put(page, (x2 + 3, y2 + 6), "Page", 5.5, face="arial")
-    _put_center(page, (x2 + x3) / 2 + 8, 93, f"{page_no} of {page_count}", 9, face="arial-bold")
+    _put_center(page, (x2 + x3) / 2 + 8, 93, f"{page_no} of {page_count}", 9, face="arial")
 
     first_po = po_label.split(" +")[0]
     if first_po:
         _draw_code39(page, x0 + 2, 100, first_po, height=10, module=0.75)
 
-    _put(page, (205, 155), f"Shipper #: {ship_no}", 9.5, face="arial-bold")
+    _put(page, (205, 155), f"Shipper #: {ship_no}", 9.5, face="arial")
     _box(page, fitz.Rect(21, 160, 325, 265), 0.9)
-    _put(page, (28, 169), "SHIPPED TO:", 6.5, face="arial-bold")
+    _put(page, (28, 169), "SHIPPED TO:", 6.5, face="arial")
     for i, line in enumerate(_shipper_address(data)):
-        _put(page, (24, 181 + i * 14), _fit(line, 296, 9.5, face="arial-bold"), 9.5, face="arial-bold")
-    _put(page, (52, 259), "Contact:", 9, face="arial-bold")
+        _put(page, (24, 181 + i * 14), _fit(line, 296, 9.5, face="arial-bold"), 9.5, face="arial-bold")  # ship-to stays bold
+    _put(page, (52, 259), "Contact:", 9, face="arial")
 
 
 def _draw_shipper_table(page: fitz.Page, jobs: list) -> None:
@@ -622,20 +620,20 @@ def _draw_shipper_table(page: fitz.Page, jobs: list) -> None:
     for x in cols[1:-1]:
         _line(page, x, top, x, head_bottom, 0.6)
     for i, label in enumerate(_SHIPPER_HEADERS):
-        _put_center(page, (cols[i] + cols[i + 1]) / 2, top + 10, label, 9, face="arial-bold")
+        _put_center(page, (cols[i] + cols[i + 1]) / 2, top + 10, label, 9, face="arial")
 
     y = head_bottom
     for job in jobs:
         base = y + 12
         qty = job.quantity_shipped if job.quantity_shipped is not None else job.quantity
         unit = "Lot" if _text(job.unit).lower() == "lot" else "Each"
-        _put_right(page, cols[1] - 4, base, "" if qty is None else str(qty), 9.5, face="arial-bold")
-        _put_right(page, cols[2] - 4, base, unit, 9.5, face="arial-bold")
-        _put(page, (cols[2] + 3, base), _fit(_text(job.part_number), cols[3] - cols[2] - 6, 8.5, face="arial-narrow-bold"), 8.5, face="arial-narrow-bold")
-        _put(page, (cols[3] + 3, base), _fit(_text(job.part_revision) or "-", cols[4] - cols[3] - 6, 9, face="arial-bold"), 9, face="arial-bold")
-        _put(page, (cols[4] + 3, base), _fit(_text(job.description), cols[5] - cols[4] - 6, 8, face="arial-narrow-bold"), 8, face="arial-narrow-bold")
-        _put(page, (cols[5] + 3, base), f"{_text(job.job_number)} Rel 1", 9.5, face="arial-bold")
-        _put(page, (cols[6] + 3, base), _text(job.po_line) or "1", 9.5, face="arial-bold")
+        _put_right(page, cols[1] - 4, base, "" if qty is None else str(qty), 9.5, face="arial")
+        _put_right(page, cols[2] - 4, base, unit, 9.5, face="arial")
+        _put(page, (cols[2] + 3, base), _fit(_text(job.part_number), cols[3] - cols[2] - 6, 8.5, face="arial-narrow"), 8.5, face="arial-narrow")
+        _put(page, (cols[3] + 3, base), _fit(_text(job.part_revision) or "-", cols[4] - cols[3] - 6, 9, face="arial"), 9, face="arial")
+        _put(page, (cols[4] + 3, base), _fit(_text(job.description), cols[5] - cols[4] - 6, 8, face="arial-narrow"), 8, face="arial-narrow")
+        _put(page, (cols[5] + 3, base), f"{_text(job.job_number)} Rel 1", 9.5, face="arial")
+        _put(page, (cols[6] + 3, base), _text(job.po_line) or "1", 9.5, face="arial")
         for x in cols:
             _line(page, x, y + 2, x, y + 18, 0.6)
         _line(page, cols[0] + 4, y + _SHIPPER_ROW_H - 3, cols[-1], y + _SHIPPER_ROW_H - 3, 0.6)
@@ -646,7 +644,7 @@ def _draw_shipper_footer(page: fitz.Page, data: ShipperPrintData, copy_label: st
     last = page_no == page_count
     if last:
         _fill(page, fitz.Rect(49, 514, 80, 524), LIGHT_GRAY)
-        _put(page, (51, 521.5), "Comments:", 5.4, face="arial-bold")
+        _put(page, (51, 521.5), "Comments:", 5.4, face="arial")
         comments = fitz.Rect(82, 513, 551, 601)
         _box(page, comments, 0.9)
         note = note_plain_text(data.shipper.note) or ""
@@ -658,16 +656,16 @@ def _draw_shipper_footer(page: fitz.Page, data: ShipperPrintData, copy_label: st
                 color=BLACK,
                 **_font_args("arial"),
             )
-        _put(page, (45, 697), "Shipped by:  /  Received by:", 9, face="arial-bold")
-        _put(page, (312, 697), "Date:", 9, face="arial-bold")
-        _line(page, 45, 711, 290, 711, 0.8)
-        _line(page, 312, 711, 413, 711, 0.8)
-    _put(page, (507, 727), "SK055 Rev B", 7, face="arial")
-    _put(page, (32, 736), stamp, 7, face="arial")
+        _put(page, (45, 692), "Shipped by:  /  Received by:", 9, face="arial")
+        _put(page, (312, 692), "Date:", 9, face="arial")
+        # Signature lines sit well below the labels to leave room to sign.
+        _line(page, 45, 726, 290, 726, 0.8)
+        _line(page, 312, 726, 413, 726, 0.8)
+    _put(page, (32, 738), stamp, 7, face="arial")
     prepared = _text(data.prepared_by) or _text(data.shipper.ship_by)
     _put(page, (21, 746), f"Prepared By:  {prepared}" if prepared else "Prepared By:", 7, face="arial")
-    _put_center(page, 334, 748, copy_label, 12, face="arial-bold")
-    _put(page, (520, 748), f"Page {page_no} of {page_count}", 9.5, face="arial-bold")
+    _put_center(page, 334, 748, copy_label, 12, face="arial-bold")  # copy label stays bold
+    _put(page, (520, 748), f"Page {page_no} of {page_count}", 9.5, face="arial")
 
 
 def build_shipper_pdf(data: ShipperPrintData, copies: tuple[str, ...] | list[str] = DEFAULT_SHIPPER_COPIES) -> bytes:

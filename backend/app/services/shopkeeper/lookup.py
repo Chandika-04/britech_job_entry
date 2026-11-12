@@ -39,6 +39,21 @@ def sort_price_history(quotes: list[PriceQuote]) -> list[PriceQuote]:
     )
 
 
+def pick_matrix_break(breaks: list, quantity: int, qty_of=lambda row: row[0]):
+    """Which price-matrix row applies to an order quantity.
+
+    The smallest break at or above the order quantity; above the top break, the top break.
+    Breaks 1, 5, 10: qty 1 -> 1, qty 2-5 -> 5, qty 6-10 -> 10, qty 11+ -> 10.
+    """
+    ordered = sorted(breaks, key=qty_of)
+    if not ordered:
+        return None
+    for row in ordered:
+        if qty_of(row) >= quantity:
+            return row
+    return ordered[-1]
+
+
 def normalize_search_by(value: str | None) -> str:
     key = (value or "po").strip().lower()
     return key if key in SEARCH_FIELDS else "po"
