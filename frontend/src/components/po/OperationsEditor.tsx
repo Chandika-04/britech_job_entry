@@ -24,8 +24,13 @@ function blankOp(seq: number): OperationRow {
   };
 }
 
+// Notes loaded from ShopKeeper are HTML; notes being typed are already plain text. Only convert HTML,
+// so trailing spaces and newlines survive while typing (the server trims on save).
+const LOOKS_LIKE_HTML = /<[a-zA-Z/!?]/;
+
 function plainNote(value: string | null | undefined): string {
   if (!value) return "";
+  if (!LOOKS_LIKE_HTML.test(value)) return value;
   return value
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(div|p|li|tr|h[1-6])>/gi, "\n")
