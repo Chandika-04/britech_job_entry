@@ -13,6 +13,7 @@ from app.services.shopkeeper.lookup import (
     paginate_parts,
     paginate_shippers,
     pick_matrix_break,
+    pick_matrix_revision,
     po_group_from_jobs,
     sort_price_history,
     starts_with,
@@ -457,9 +458,8 @@ class FakeShopKeeper:
         q = (part_number or "").strip()
         if not q:
             return []
+        # Every revision of the part matches; the revision never narrows the search.
         rows = [row for row in self.parts if not row.inactive and starts_with(row.part_number, q)]
-        if part_revision and part_revision.strip():
-            rows = [row for row in rows if starts_with(row.part_revision, part_revision)]
         rows.sort(key=lambda row: (row.part_number, row.part_revision))
         return rows[:LOOKUP_LIMIT]
 
@@ -844,7 +844,12 @@ class FakeShopKeeper:
                         note=row.get("note") or "Contract",
                     )
                 )
-        part = self.get_part(part_number, part_revision)
+        # One price matrix: the given revision's when the part has it, otherwise the newest revision's.
+        revisions = {
+            row.part_revision: row for row in self.parts if row.part_number == part_number and not row.inactive
+        }
+        matrix_rev = pick_matrix_revision(list(revisions), part_revision)
+        part = revisions[matrix_rev] if matrix_rev is not None else None
         if part:
             today = date.today()
             breaks = [
@@ -862,6 +867,7 @@ class FakeShopKeeper:
                             quantity=best["qty"],
                             note=f"Qty break {best['qty']}",
                             expires=best.get("expires"),
+                            part_revision=matrix_rev,
                         )
                     )
             else:
@@ -873,18 +879,16 @@ class FakeShopKeeper:
                             quantity=row["qty"],
                             note=f"Qty break {row['qty']}",
                             expires=row.get("expires"),
+                            part_revision=matrix_rev,
                         )
                     )
-        key = f"{customer_number} {part_number} {part_revision}"
-        quotes.extend(
-            sort_price_history(
-                [
-                    quote
-                    for quote in self.price_history
-                    if (quote.note or "") == key or (quote.note or "").startswith(key)
-                ]
-            )
-        )
+        # History notes are "customer part rev"; every revision of the part counts.
+        history = []
+        for quote in self.price_history:
+            key = (quote.note or "").split(" ")
+            if key[:2] == [customer_number, part_number]:
+                history.append(replace(quote, part_revision=key[2] if len(key) > 2 else None))
+        quotes.extend(sort_price_history(history))
         return quotes
 
     def job_op_count(self, job_number: str) -> int:

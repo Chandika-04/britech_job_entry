@@ -69,16 +69,17 @@ export function PriceLookup({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
-  const ready = Boolean(customerNumber && partNumber && partRevision);
+  // Prices cover every revision of the part number; the revision only picks which price matrix to show.
+  const ready = Boolean(customerNumber && partNumber);
   const showing = open && quotes !== null;
   const pickable = Boolean(onPick) && !disabled;
 
   const search = async () => {
-    if (!customerNumber || !partNumber || !partRevision) return;
+    if (!customerNumber || !partNumber) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await api.lookupPrices(customerNumber, partNumber, partRevision, quantity);
+      const result = await api.lookupPrices(customerNumber, partNumber, partRevision ?? "", quantity);
       setQuotes(result.quotes);
       setOpen(true);
       if (result.quotes.length === 0) setError("No contract, matrix, job, or proposal prices found for this customer and part.");
@@ -123,6 +124,7 @@ export function PriceLookup({
                 <th>Source</th>
                 <th className="num">Price</th>
                 <th className="num">Qty</th>
+                <th>Rev</th>
                 <th className="pl-5">Job / proposal #</th>
                 <th>Date</th>
                 {pickLabel && onPick ? <th /> : null}
@@ -151,6 +153,7 @@ export function PriceLookup({
                   <td>{SOURCE_LABELS[quote.source] ?? quote.source}</td>
                   <td className="num font-mono">{formatUsd(quote.unit_price)}</td>
                   <td className="num font-mono">{quote.quantity ?? "—"}</td>
+                  <td className="font-mono text-xs">{quote.part_revision || "—"}</td>
                   <td className="pl-5 font-mono text-xs" title={referenceTitle(quote)}>
                     {/* One number: the job number for past jobs, the proposal number for proposals. */}
                     {quote.job_number || quote.note || "—"}

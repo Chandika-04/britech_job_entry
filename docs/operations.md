@@ -37,7 +37,7 @@ If **both** job operations and certification are missing after create: job is st
 
 `PartMaster` PK is `Pm_LinkID` (identity). Business unique key is `(Pm_PartNum, Pm_PartRev, Pm_MasterType)` index `PartMaster$Pm_PartRevIdx`.
 
-Live snapshot: **29,297** parts, **every** row `Pm_MasterType = 'Production'`. No duplicate `(PartNum, Rev)` with a second master type. Missing revision on the PO is stored as rev **`-`** in ShopKeeper (common). Lookup in this app already uses part + rev; that is enough in this database.
+Live snapshot: **29,297** parts, **every** row `Pm_MasterType = 'Production'`. No duplicate `(PartNum, Rev)` with a second master type. Missing revision on the PO is stored as rev **`-`** in ShopKeeper (common). Part search and price history in this app use the part number only (every rev); the rev only picks which part is used and which price matrix shows (the line's rev, else the newest).
 
 This app already stores `resolved_pm_linkid` = `Pm_LinkID` and writes it to `JobRelease.Jr_PartMasterLink`. All part child tables hang off `Pm_LinkID`.
 

@@ -57,6 +57,15 @@ def revision_rank(revision: str | None) -> tuple:
     return tuple((1, token.upper()) if token.isalpha() else (0, int(token)) for token in tokens)
 
 
+def pick_matrix_revision(revisions: list[str], wanted: str | None) -> str | None:
+    """Which revision's price matrix to use: the wanted revision when the part has it, else the newest."""
+    if not revisions:
+        return None
+    want = (wanted or "").strip().casefold()
+    exact = next((rev for rev in revisions if rev.strip().casefold() == want), None) if want else None
+    return exact if exact is not None else max(revisions, key=revision_rank)
+
+
 def sort_parts_newest_rev_first(parts: list) -> list:
     """Part numbers A-Z; within one part number, the newest revision first (C, B, A / 03, 02, 01)."""
     by_rev = sorted(parts, key=lambda part: revision_rank(part.part_revision), reverse=True)

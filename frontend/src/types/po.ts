@@ -197,6 +197,8 @@ export interface PriceQuote {
   note: string | null;
   /** Price-matrix rows only: when the break expires (null = never). */
   expires?: string | null;
+  /** The revision this price came from (history covers every revision of the part). */
+  part_revision?: string | null;
 }
 
 export interface PriceLookupResponse {

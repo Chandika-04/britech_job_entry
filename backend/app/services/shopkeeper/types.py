@@ -132,6 +132,7 @@ class PriceQuote:
     order_date: date | None = None
     note: str | None = None
     expires: date | None = None  # price-matrix rows only
+    part_revision: str | None = None  # which revision the price came from (history covers every rev)
 
 
 @dataclass

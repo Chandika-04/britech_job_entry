@@ -185,7 +185,9 @@ Click a cell to type. The highlighted row (accent bar) is the line you are on. O
 **Automatic price.** When you pick a line's ShopKeeper part, or change its quantity afterwards, an **empty** unit price fills in by itself:
 
 1. **Price matrix first**, by quantity: the part's unexpired row with the smallest quantity at or above the line's quantity, or the top row if the quantity is above them all. With rows 1, 5, and 10: qty 1 uses the 1 price, qty 2–5 the 5 price, qty 6 and up the 10 price.
-2. **Otherwise the last price used**: the price on this customer's most recent ShopKeeper job for the same part and rev.
+2. **Otherwise the last price used**: the price on this customer's most recent ShopKeeper job for the same part number, whatever its rev.
+
+**Price lookup** shows job and proposal prices for **every revision** of the part number, with a **Rev** column. The price matrix shown is the line's rev, or the newest rev if the line's rev isn't in ShopKeeper.
 
 A green note shows where the price came from. It never replaces a price from the PO or one you typed; if it filled the price and you then change the quantity, it updates its own price. Contract prices and proposals are not used for this (they still show in **Price lookup**). Save to keep the price.
 | **Due** | Always **today's date** (the day the PO was extracted), whatever date the PO shows. Change it here if a line needs a different date. |
@@ -246,7 +248,7 @@ Once the customer is picked, the app also checks whether the same PO number was 
 
 Open the line (chevron or **Enter**). The ShopKeeper part search is already filled from the extracted part number and revision.
 
-1. Correct the search if ShopKeeper uses a different part number. Matches that **start with** what you typed appear as you type.
+1. Correct the search if ShopKeeper uses a different part number. Matches that **start with** what you typed appear as you type. The search uses the part number only: **every revision** shows (newest first), even if the PO's rev isn't in ShopKeeper. The **Rev** box is the rev a new part gets if you click **Create new part**.
 2. Press **Enter** for the first match, or click the correct part row. That fills **Part #**, **Rev**, and **Description** on the line. You can still edit those fields.
 3. If nothing matches, **Create new part** opens the part editor. When you come back, that line reopens and searches again.
 

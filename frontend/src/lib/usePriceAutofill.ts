@@ -27,7 +27,8 @@ export function describeSuggestion(quote: PriceQuote): string {
     return quote.expires ? `price matrix, expires ${formatDate(quote.expires)}` : "price matrix, no expiry";
   }
   const when = quote.order_date ? ` (${formatDate(quote.order_date)})` : "";
-  return `last price used, job ${quote.job_number ?? "?"}${when}`;
+  const rev = quote.part_revision ? `, rev ${quote.part_revision}` : "";
+  return `last price used, job ${quote.job_number ?? "?"}${rev}${when}`;
 }
 
 /**

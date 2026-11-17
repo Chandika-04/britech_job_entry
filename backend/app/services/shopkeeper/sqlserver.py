@@ -14,6 +14,7 @@ from app.services.shopkeeper.lookup import (
     po_group_from_jobs,
     prefix_like,
     ready_term,
+    pick_matrix_revision,
     sort_price_history,
 )
 from app.services.shopkeeper.sqlserver_ops import SqlServerOpsMixin
@@ -478,14 +479,10 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
                 FROM dbo.PartMaster
                 WHERE Pm_PartNum LIKE ? AND COALESCE(Pm_InActive, 0) = 0
             """
-            params: list = [pattern]
-            rev_pattern = prefix_like(part_revision or "")
-            if rev_pattern:
-                sql += " AND Pm_PartRev LIKE ?"
-                params.append(rev_pattern)
+            # Every revision of the part matches; the revision never narrows the search.
             # Highest revisions first so the newest survive the TOP limit; final order is set in writer.lookup_parts.
             sql += " ORDER BY Pm_PartNum, Pm_PartRev DESC"
-            rows = conn.cursor().execute(sql, *params).fetchall()
+            rows = conn.cursor().execute(sql, pattern).fetchall()
             return [_row_to_part(row) for row in rows]
         finally:
             conn.close()
@@ -1246,15 +1243,20 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
                     )
                 )
 
-            part_row = cur.execute(
-                """
-                SELECT Pm_LinkID
-                FROM dbo.PartMaster
-                WHERE Pm_PartNum = ? AND Pm_PartRev = ? AND COALESCE(Pm_InActive, 0) = 0
-                """,
-                part_number,
-                part_revision,
-            ).fetchone()
+            # One price matrix: the given revision's when the part has it, otherwise the newest revision's.
+            revisions = {
+                str(row[1] or "").strip(): int(row[0])
+                for row in cur.execute(
+                    """
+                    SELECT Pm_LinkID, Pm_PartRev
+                    FROM dbo.PartMaster
+                    WHERE Pm_PartNum = ? AND COALESCE(Pm_InActive, 0) = 0
+                    """,
+                    part_number,
+                ).fetchall()
+            }
+            matrix_rev = pick_matrix_revision(list(revisions), part_revision)
+            part_row = (revisions[matrix_rev],) if matrix_rev is not None else None
             if part_row:
                 breaks = [
                     (
@@ -1288,6 +1290,7 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
                                 quantity=qty,
                                 note=note or f"Qty break {qty}",
                                 expires=expires,
+                                part_revision=matrix_rev,
                             )
                         )
                 else:
@@ -1299,21 +1302,21 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
                                 quantity=qty,
                                 note=note or f"Qty break {qty}",
                                 expires=expires,
+                                part_revision=matrix_rev,
                             )
                         )
 
             history: list[PriceQuote] = []
             for row in cur.execute(
                 """
-                SELECT TOP 200 Jb_Job_Num, Jb_PO_Num, Jb_Price, Jb_Qty_Order, Jb_Order_Date
+                SELECT TOP 200 Jb_Job_Num, Jb_PO_Num, Jb_Price, Jb_Qty_Order, Jb_Order_Date, Jb_Part_Rev
                 FROM dbo.Jobs
-                WHERE Jb_Cust_Code = ? AND Jb_Part_Num = ? AND Jb_Part_Rev = ?
+                WHERE Jb_Cust_Code = ? AND Jb_Part_Num = ?
                   AND Jb_Price IS NOT NULL
                 ORDER BY Jb_Order_Date DESC, TRY_CONVERT(bigint, Jb_Job_Num) DESC, Jb_Job_Num DESC
                 """,
                 customer_number,
                 part_number,
-                part_revision,
             ).fetchall():
                 price = _as_money(row[2])
                 if price is None:
@@ -1326,13 +1329,14 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
                         job_number=str(row[0] or "").strip() or None,
                         po_number=_as_optional_str(row[1]),
                         order_date=_as_date(row[4]),
+                        part_revision=_as_optional_str(row[5]),
                     )
                 )
             for row in cur.execute(
                 """
                 SELECT TOP 200
                     Q.ProQ_Num, Q.ProQ_QuoteNum, I.ProI_Price, I.ProI_QuoteQty,
-                    COALESCE(Q.ProQ_Date, M.ProM_Date)
+                    COALESCE(Q.ProQ_Date, M.ProM_Date), Q.ProQ_PartRev
                 FROM dbo.ProposalQuotes Q
                 INNER JOIN dbo.ProposalItems I
                     ON I.ProI_Num = Q.ProQ_Num AND I.ProI_QuoteNum = Q.ProQ_QuoteNum
@@ -1340,14 +1344,12 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
                     ON M.ProM_Num = Q.ProQ_Num
                 WHERE M.ProM_CustCode = ?
                   AND Q.ProQ_PartNum = ?
-                  AND Q.ProQ_PartRev = ?
                   AND I.ProI_Price IS NOT NULL
                   AND COALESCE(Q.ProQ_ObsoletePrice, 0) = 0
                 ORDER BY COALESCE(Q.ProQ_Date, M.ProM_Date) DESC, Q.ProQ_Num DESC, I.ProI_QuoteQty
                 """,
                 customer_number,
                 part_number,
-                part_revision,
             ).fetchall():
                 price = _as_money(row[2])
                 if price is None:
@@ -1361,6 +1363,7 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
                         po_number=_as_optional_str(row[1]),
                         order_date=_as_date(row[4]),
                         note="Proposal",
+                        part_revision=_as_optional_str(row[5]),
                     )
                 )
             quotes.extend(sort_price_history(history))

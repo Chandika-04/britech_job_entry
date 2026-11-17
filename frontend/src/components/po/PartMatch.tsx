@@ -62,7 +62,9 @@ export function PartMatchSection({
     onAfterUse?.();
   };
 
-  const searchParts = (number = partNumber, revision = partRevision): Promise<PartCandidate[]> => {
+  // Searches by part number only: every revision comes back (newest first). The Rev box is only the
+  // revision a new part gets.
+  const searchParts = (number = partNumber): Promise<PartCandidate[]> => {
     const q = number.trim();
     const seq = ++lookupSeq.current;
     if (!q) {
@@ -74,7 +76,7 @@ export function PartMatchSection({
     }
     setSearching(true);
     return api
-      .lookupParts(q, revision.trim() || undefined)
+      .lookupParts(q)
       .then((result) => {
         if (seq !== lookupSeq.current) return matchesRef.current;
         matchesRef.current = result.matches;
@@ -104,7 +106,7 @@ export function PartMatchSection({
     const q = partNumber.trim();
     if (!q || disabled) return false;
     let matches = matchesRef.current;
-    if (matches.length === 0) matches = await searchParts(q, partRevision);
+    if (matches.length === 0) matches = await searchParts(q);
     const top = matches[0];
     if (!top) return false;
     await applyPart(top);
@@ -165,9 +167,9 @@ export function PartMatchSection({
       setSearching(false);
       return;
     }
-    const handle = window.setTimeout(() => void searchParts(q, partRevision), 250);
+    const handle = window.setTimeout(() => void searchParts(q), 250);
     return () => window.clearTimeout(handle);
-  }, [partNumber, partRevision, disabled]);
+  }, [partNumber, disabled]);
 
   return (
     <div className="space-y-2">
@@ -190,6 +192,7 @@ export function PartMatchSection({
           <Label>Rev</Label>
           <Input
             className="font-mono"
+            title="Search shows every revision. This rev is used when you create a new part."
             value={partRevision}
             disabled={disabled}
             autoComplete="off"

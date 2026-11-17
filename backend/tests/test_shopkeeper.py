@@ -10,6 +10,7 @@ from app.services.extraction.fake import FakeExtractionProvider
 from app.services.extraction.pipeline import run_extraction
 from app.services.po_service import confirm_reviewed, create_from_upload, get_po, save_draft, to_summary
 from app.services.shopkeeper.fake import FakeShopKeeper
+from app.services.shopkeeper.types import PriceQuote
 from app.services.shopkeeper.writer import (
     acknowledge_credit_hold,
     acknowledge_duplicate,
@@ -17,6 +18,7 @@ from app.services.shopkeeper.writer import (
     delete_shopkeeper_job,
     lookup_customers,
     lookup_parts,
+    lookup_prices,
     reset_erp,
     resolve_customer,
     resolve_part,
@@ -67,15 +69,35 @@ def test_customer_lookup_matches_starts_with():
     assert lookup_customers("Advanced", fake)["matches"] == []
 
 
-def test_part_lookup_requires_explicit_revision():
+def test_part_lookup_ignores_revision():
     fake = FakeShopKeeper()
-    multi = lookup_parts("MULTI-REV", None, fake)
-    assert len(multi["matches"]) == 2
-    assert multi["exact_one"] is False
-    one = lookup_parts("MULTI-REV", "B", fake)
-    assert one["exact_one"] is True
-    assert one["matches"][0]["part_revision"] == "B"
+    for rev in (None, "B", "Z"):
+        matches = lookup_parts("MULTI-REV", rev, fake)["matches"]
+        assert [row["part_revision"] for row in matches] == ["B", "A"]  # every rev, newest first
     assert lookup_parts("DEAD-PART", "A", fake)["matches"] == []
+
+
+def test_price_lookup_covers_every_revision():
+    fake = FakeShopKeeper()
+    fake.price_history += [
+        PriceQuote(source="history", unit_price=Decimal("3.00"), job_number="300001",
+                   order_date=date(2026, 1, 1), note="CORTEC MULTI-REV A"),
+        PriceQuote(source="history", unit_price=Decimal("4.00"), job_number="300002",
+                   order_date=date(2026, 2, 1), note="CORTEC MULTI-REV B"),
+    ]
+    fake.matrix_prices += [
+        {"id": 900, "pm_linkid": 103, "qty": 1, "price": Decimal("5.00"), "expires": None},
+        {"id": 901, "pm_linkid": 104, "qty": 1, "price": Decimal("6.00"), "expires": None},
+    ]
+
+    def summary(rev):
+        return [(q.source, q.part_revision, str(q.unit_price)) for q in lookup_prices("CORTEC", "MULTI-REV", rev, None, fake)]
+
+    history = [("history", "B", "4.00"), ("history", "A", "3.00")]
+    # History from both revs whatever rev is asked for; the matrix is the asked rev's, else the newest rev's.
+    assert summary("A") == [("matrix", "A", "5.00"), *history]
+    assert summary("") == [("matrix", "B", "6.00"), *history]
+    assert summary("C") == [("matrix", "B", "6.00"), *history]
 
 
 def test_part_lookup_matches_starts_with():
