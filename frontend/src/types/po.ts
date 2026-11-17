@@ -160,6 +160,7 @@ export interface PartCandidate {
   master_type: string | null;
   pm_linkid: number;
   inactive: boolean;
+  material?: string | null;
 }
 
 export interface CustomerLookupResponse {
@@ -388,6 +389,7 @@ export interface JobPage {
   work_centers: WorkCenter[];
   templates: OpTemplate[];
   pictures: PartPicture[];
+  material?: string | null;
 }
 
 export interface PriceMatrixRow {
@@ -421,6 +423,8 @@ export interface PartEditor {
   quality_hold_note: string | null;
   fa_hold: boolean;
   ship_hold: boolean;
+  /** ShopKeeper Pm_MaterialNote. */
+  material: string | null;
   operations: OperationRow[];
   pictures: PartPicture[];
   linked_certs: CertText[];
@@ -434,6 +438,22 @@ export interface PartHeaderPayload {
   part_revision: string;
   customer_code: string;
   description: string | null;
+  material: string;
+}
+
+export interface MaterialOption {
+  id: number;
+  name: string;
+  active: boolean;
+}
+
+export interface CertTemplate {
+  id: string;
+  description: string | null;
+  /** Plain text (ShopKeeper stores HTML; the server converts both ways). */
+  text: string;
+  rowversion: string | null;
+  part_count: number;
 }
 
 export interface PartListRow {
@@ -447,6 +467,7 @@ export interface PartListRow {
   operation_count: number;
   picture_count: number;
   cert_linked: boolean;
+  material?: string | null;
 }
 
 export interface PartListResponse {

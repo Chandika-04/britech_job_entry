@@ -155,6 +155,7 @@ function PartTable({
           <th>Rev</th>
           <th>Customer</th>
           <th>Description</th>
+          <th>Material</th>
           <th className="num">Ops</th>
           <th>Pic</th>
           <th>Cert</th>
@@ -177,6 +178,7 @@ function PartTable({
             <td className="font-mono">{row.part_revision || "—"}</td>
             <td className="font-mono">{row.customer_code || "—"}</td>
             <td className="max-w-[360px] truncate">{row.description || "—"}</td>
+            <td className="whitespace-nowrap">{row.material || "—"}</td>
             <td className="num font-mono tabular-nums">{row.operation_count}</td>
             <td>{row.picture_count > 0 ? "Yes" : "—"}</td>
             <td>{row.cert_linked ? "Yes" : "—"}</td>

@@ -383,6 +383,7 @@ def _row_to_part(row) -> PartRecord:
         master_type=row[3] or "Production",
         pm_linkid=int(row[4]),
         inactive=_as_bool(row[5]),
+        material=_as_optional_str(row[6]) if len(row) > 6 else None,
     )
 
 
@@ -473,7 +474,7 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
         try:
             sql = f"""
                 SELECT TOP {LOOKUP_LIMIT} Pm_PartNum, Pm_PartRev, Pm_PartDesc, COALESCE(Pm_MasterType, N'Production'),
-                       Pm_LinkID, COALESCE(Pm_InActive, 0)
+                       Pm_LinkID, COALESCE(Pm_InActive, 0), Pm_MaterialNote
                 FROM dbo.PartMaster
                 WHERE Pm_PartNum LIKE ? AND COALESCE(Pm_InActive, 0) = 0
             """
@@ -495,7 +496,7 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
             row = conn.cursor().execute(
                 """
                 SELECT Pm_PartNum, Pm_PartRev, Pm_PartDesc, COALESCE(Pm_MasterType, N'Production'),
-                       Pm_LinkID, COALESCE(Pm_InActive, 0)
+                       Pm_LinkID, COALESCE(Pm_InActive, 0), Pm_MaterialNote
                 FROM dbo.PartMaster
                 WHERE Pm_PartNum = ? AND Pm_PartRev = ? AND COALESCE(Pm_InActive, 0) = 0
                 """,
@@ -506,7 +507,7 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
         finally:
             conn.close()
 
-    def find_jobs_by_po_line(self, po_number: str, po_line: str) -> list[str]:
+    def find_jobs_for_line(self, po_number: str, po_line: str, customer_code: str, part_number: str) -> list[str]:
         conn, _ = self._connect()
         try:
             rows = conn.cursor().execute(
@@ -514,10 +515,13 @@ class SqlServerShopKeeper(SqlServerOpsMixin):
                 SELECT j.Jb_Job_Num
                 FROM dbo.Jobs j
                 JOIN dbo.JobShip s ON s.Sh_Job_Num = j.Jb_Job_Num
-                WHERE j.Jb_PO_Num = ? AND s.Sh_PO_Line = ?
+                WHERE j.Jb_PO_Num = ? AND s.Sh_PO_Line = ? AND j.Jb_Cust_Code = ? AND j.Jb_Part_Num = ?
+                ORDER BY TRY_CONVERT(bigint, j.Jb_Job_Num) DESC, j.Jb_Job_Num DESC
                 """,
                 po_number,
                 po_line,
+                customer_code,
+                part_number,
             ).fetchall()
             return [str(row[0]) for row in rows]
         finally:

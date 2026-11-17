@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { JobPage } from "@/pages/JobPage";
+import { AdvancedSettingsPage } from "@/pages/AdvancedSettingsPage";
 import { ManualEntryPage } from "@/pages/ManualEntryPage";
 import { NewPoPage } from "@/pages/NewPoPage";
 import { PartEditorPage } from "@/pages/PartEditorPage";
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/parts/new" element={<PartEditorPage />} />
           <Route path="/parts/:pmLinkId" element={<PartEditorPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/advanced" element={<AdvancedSettingsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

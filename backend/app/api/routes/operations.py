@@ -25,6 +25,7 @@ from app.schemas.operations import (
     QualityHoldIn,
     WorkCenterOut,
 )
+from app.services.materials import resolve_part_material
 from app.services.po_service import get_po
 from app.services.print.printer import direct_print_status
 from app.services.shopkeeper.operations import (
@@ -235,8 +236,8 @@ def parts_list(
 
 
 @router.post("/parts", response_model=PartEditorOut, status_code=201)
-def parts_create(payload: PartHeaderIn) -> PartEditorOut:
-    return create_part(payload)
+def parts_create(payload: PartHeaderIn, db: Session = Depends(get_db)) -> PartEditorOut:
+    return create_part(payload, material=resolve_part_material(db, payload.material))
 
 
 _PREVIEW_CACHE = {"Cache-Control": "private, max-age=300"}
@@ -255,8 +256,11 @@ def part_editor(pm_linkid: int) -> PartEditorOut:
 
 
 @router.put("/parts/{pm_linkid}", response_model=PartEditorOut)
-def part_save_header(pm_linkid: int, payload: PartHeaderIn) -> PartEditorOut:
-    return update_part_header(pm_linkid, payload)
+def part_save_header(pm_linkid: int, payload: PartHeaderIn, db: Session = Depends(get_db)) -> PartEditorOut:
+    provider = get_shopkeeper_provider()
+    current = get_part_editor(pm_linkid, provider)
+    material = resolve_part_material(db, payload.material, current.material)
+    return update_part_header(pm_linkid, payload, provider, material=material)
 
 
 @router.put("/parts/{pm_linkid}/operations", response_model=list[OperationOut])

@@ -7,6 +7,7 @@ import { PdfViewer } from "@/components/pdf/PdfViewer";
 import { CustomerMatchSection } from "@/components/po/CustomerMatch";
 import { LinesCard } from "@/components/po/lines/LinesCard";
 import { createJobThenPrint, JobPrintBlock, type RunLine } from "@/components/po/lines/actions";
+import { createLineJob, useCreateIssueDialog } from "@/components/po/lines/createIssues";
 import { poCustomerCode } from "@/components/po/lines/helpers";
 import { PoHeaderForm } from "@/components/po/PoHeaderForm";
 import { PrintJobDialog } from "@/components/po/PrintJobDialog";
@@ -150,6 +151,7 @@ export function ReviewPage() {
   const [busy, setBusy] = useState(false);
   const [busyLine, setBusyLine] = useState<number | null>(null);
   const [batchBlock, setBatchBlock] = useState<CreatePrintResult | null>(null);
+  const { ask: askIssue, dialog: issueDialog } = useCreateIssueDialog();
   const [printJob, setPrintJob] = useState<{ jobNumber: string; certAvailable: boolean } | null>(null);
   const [skStatus, setSkStatus] = useState<Record<string, string>>({});
   const [attentionTick, setAttentionTick] = useState(0);
@@ -338,18 +340,42 @@ export function ReviewPage() {
     if (readyLines.length === 0) return;
     void run(readyLines[0].id, async () => {
       let latest = po;
+      const created: string[] = [];
+      const notes: string[] = [];
       for (const line of readyLines) {
-        const result = await createJobThenPrint(po.id, line.id, line.cert_required, askPrint);
-        latest = result.po;
-        if (result.missing_ops || result.missing_cert) {
-          setBatchBlock(result);
-          setNotice(`Job ${result.job_number} was created. Nothing was printed.`);
-          return latest;
+        const label = `Line ${line.line_number ?? line.id}`;
+        const done = await createLineJob(
+          latest,
+          line,
+          (lineId) => createJobThenPrint(po.id, lineId, line.cert_required, askPrint),
+          askIssue,
+          true,
+        );
+        latest = done.po;
+        setPo(done.po); // keep the screen current while the rest are created
+        if (done.outcome === "created") {
+          const result = done.result;
+          created.push(result.job_number);
+          if (result.missing_ops || result.missing_cert) {
+            setBatchBlock(result);
+            notes.push(`Job ${result.job_number} was created but nothing was printed; the remaining lines were not started.`);
+            break;
+          }
+          if (result.print_error) notes.push(`${label}: print skipped (${result.print_error}).`);
+        } else if (done.outcome === "created_no_reply") {
+          created.push(done.jobNumber);
+          notes.push(`${label}: job ${done.jobNumber} was created but the reply was lost, so it was not printed.`);
+        } else if (done.outcome === "skipped") {
+          notes.push(`${label} skipped.`);
+        } else if (done.outcome === "failed") {
+          notes.push(`${label} not created: ${done.message}`);
+        } else {
+          notes.push(`Stopped at ${label}.`);
+          break;
         }
-        if (result.printed) setNotice(`Job ${result.job_number} created.`);
-        else if (result.print_error) setNotice(`Job created. Print skipped: ${result.print_error}`);
-        else setNotice("ShopKeeper job created.");
       }
+      const head = created.length ? `Created job${created.length > 1 ? "s" : ""} ${created.join(", ")}.` : "No jobs were created.";
+      setNotice([head, ...notes].join(" "));
       return latest;
     }).then(() => {
       setAttentionTick((n) => n + 1);
@@ -692,6 +718,7 @@ export function ReviewPage() {
         <PrintJobDialog jobNumber={printJob.jobNumber} certAvailable={printJob.certAvailable} onClose={finishPrint} />
       ) : null}
       {batchBlock ? <JobPrintBlock block={batchBlock} poId={po.id} onClose={() => setBatchBlock(null)} /> : null}
+      {issueDialog}
     </div>
   );
 }

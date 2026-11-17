@@ -64,6 +64,8 @@ export function PartEditorPage() {
   const [partRevision, setPartRevision] = useState("-");
   const [customerCode, setCustomerCode] = useState("");
   const [description, setDescription] = useState("");
+  const [material, setMaterial] = useState("");
+  const [materialOptions, setMaterialOptions] = useState<string[]>([]);
   const [holdNote, setHoldNote] = useState("");
   const [templateId, setTemplateId] = useState("");
   const [shortened, setShortened] = useState<{ part?: boolean; rev?: boolean; desc?: boolean }>({});
@@ -83,9 +85,17 @@ export function PartEditorPage() {
     setPartRevision(result.part_revision || "-");
     setCustomerCode(result.customer_code || "");
     setDescription(result.description || "");
+    setMaterial(result.material || "");
     setHoldNote(result.quality_hold_note || "");
     setPreviewFailed(false);
   };
+
+  useEffect(() => {
+    api
+      .listMaterials()
+      .then((rows) => setMaterialOptions(rows.map((row) => row.name)))
+      .catch((err: Error) => setError(`Could not load the material list: ${err.message}`));
+  }, []);
 
   useEffect(() => {
     if (isNew) {
@@ -128,8 +138,15 @@ export function PartEditorPage() {
       (partNumber !== part.part_number ||
         (partRevision || "-") !== (part.part_revision || "-") ||
         customerCode !== (part.customer_code || "") ||
-        description !== (part.description || "")),
+        description !== (part.description || "") ||
+        material !== (part.material || "")),
   );
+  // Older parts may hold material text that is not on the list; show it so it is not silently lost.
+  const storedMaterial = part?.material || "";
+  const legacyMaterial =
+    storedMaterial && !materialOptions.some((name) => name.toLowerCase() === storedMaterial.toLowerCase())
+      ? storedMaterial
+      : null;
   const opsDirty = Boolean(part && JSON.stringify(ops) !== JSON.stringify(part.operations));
   const templates = part?.templates ?? [];
 
@@ -175,7 +192,7 @@ export function PartEditorPage() {
               <UnsavedBadge show={!isNew && headerDirty} />
             </CardTitle>
           </CardHeader>
-          {/* Enter moves Part # → Rev → Customer → Description (Description keeps Enter for new lines). */}
+          {/* Enter moves Part # → Rev → Material → Customer → Description. */}
           <CardContent className="space-y-3 text-sm" data-enter-form onKeyDown={handleEnterAdvance}>
             {part?.locked ? <p className="text-amber-800">This part is locked. ShopKeeper will not accept edits.</p> : null}
             {part?.fa_hold || part?.ship_hold ? (
@@ -204,6 +221,32 @@ export function PartEditorPage() {
               />
               {shortened.rev ? <p className="mt-1 text-xs text-muted">Shortened to {REV_MAX} characters from the PO.</p> : null}
             </Field>
+            <Field label="Material">
+              <select
+                required
+                aria-label="Material"
+                className={cn(
+                  "h-10 w-full rounded-md border border-rule bg-white px-2.5 text-sm text-ink focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/15 disabled:bg-head disabled:text-muted md:h-8",
+                  !material && "text-muted",
+                )}
+                disabled={busy || locked}
+                value={material}
+                onChange={(event) => setMaterial(event.target.value)}
+              >
+                <option value="">Pick a material…</option>
+                {legacyMaterial ? <option value={legacyMaterial}>{legacyMaterial} (not on the list)</option> : null}
+                {materialOptions.map((name) => (
+                  <option key={name} value={name} className="text-ink">
+                    {name}
+                  </option>
+                ))}
+              </select>
+              {!material ? (
+                <p className="mt-1 text-xs text-amber-800">Required. Pick Unknown if you are not sure.</p>
+              ) : legacyMaterial && material === legacyMaterial ? (
+                <p className="mt-1 text-xs text-muted">This part's material is not on the list. Pick one from the list when you can.</p>
+              ) : null}
+            </Field>
             <Field label="Customer">
               <CustomerCodeField value={customerCode} disabled={busy || locked} onChange={setCustomerCode} />
             </Field>
@@ -219,7 +262,7 @@ export function PartEditorPage() {
             </Field>
             {isNew ? (
               <Button
-                disabled={busy || !partNumber.trim() || !customerCode.trim()}
+                disabled={busy || !partNumber.trim() || !customerCode.trim() || !material}
                 onClick={() =>
                   run(async () => {
                     const created = await api.createPart({
@@ -227,6 +270,7 @@ export function PartEditorPage() {
                       part_revision: partRevision.trim() || "-",
                       customer_code: customerCode.trim(),
                       description: description.trim() || null,
+                      material,
                     });
                     navigate(`/parts/${created.pm_linkid}${createSearch}`, { replace: true, state: location.state });
                   }, "Part created. You can now add routing, a picture and certificates.")
@@ -236,7 +280,7 @@ export function PartEditorPage() {
               </Button>
             ) : (
               <Button
-                disabled={busy || locked || !headerDirty || !partNumber.trim() || !customerCode.trim()}
+                disabled={busy || locked || !headerDirty || !partNumber.trim() || !customerCode.trim() || !material}
                 onClick={() =>
                   run(async () => {
                     if (!part) return;
@@ -245,6 +289,7 @@ export function PartEditorPage() {
                       part_revision: partRevision.trim() || "-",
                       customer_code: customerCode.trim(),
                       description: description.trim() || null,
+                      material,
                     });
                     setPart(next);
                     setOps(next.operations);
@@ -252,6 +297,7 @@ export function PartEditorPage() {
                     setPartRevision(next.part_revision || "-");
                     setCustomerCode(next.customer_code || "");
                     setDescription(next.description || "");
+                    setMaterial(next.material || "");
                   }, "Part details saved.")
                 }
               >

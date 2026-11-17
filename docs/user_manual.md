@@ -109,12 +109,13 @@ This tab is the ShopKeeper **part master**. Search existing parts, open one to e
 
 1. Open **Parts**. The newest parts appear first.
 2. Type into the **Part number**, **Customer**, and **Description** boxes. Filled boxes combine. Results update as you type.
-3. Click a **Part #** to open the part editor. Edit part number, rev (blank saves as `-`), customer code, and description, then **Save part details**. Below that: **operations** (copied onto new jobs), **traveler picture** (link a file already on the PartPhotos share; the app does not copy it), **certification** link, **quality hold**, and the **price matrix**.
+3. Click a **Part #** to open the part editor. Edit part number, rev (blank saves as `-`), **material**, customer code, and description, then **Save part details**. Below that: **operations** (copied onto new jobs), **traveler picture** (link a file already on the PartPhotos share; the app does not copy it), **certification** link, **quality hold**, and the **price matrix**.
 
-**Price matrix:** each row is a quantity break with its price per piece. An order uses the row with the smallest quantity at or above the order quantity, or the top row when the order is bigger than every row (rows 1, 5, 10: qty 2–5 uses the 5 price, qty 6+ the 10 price). Fill in the bottom row (qty, price, expiry, optional note) and click **Add price**, or press **Enter** to move Qty → Price → Expires → Note; **Enter** on Note saves the row once qty, price and expiry are filled (it goes back to the first empty one if not) and puts you back on Qty for the next price. Editing a row works the same way; **Edit** and **Delete** change a row. The entered date is set to today. The expiry date starts at today plus the number of days set in **Settings** (365 unless changed); clear it for no expiry. A quantity can have only one current price, so to change it edit that row (or let it expire and add a new one). Expired rows stay in gray as history and are skipped by price lookup. Changes save straight to ShopKeeper.
+**Price matrix:** each row is a quantity break with its price per piece. An order uses the row with the smallest quantity at or above the order quantity, or the top row when the order is bigger than every row (rows 1, 5, 10: qty 2–5 uses the 5 price, qty 6+ the 10 price). Fill in the bottom row (qty, price, expiry, optional note) and click **Add price**, or press **Enter** to move Qty → Price → Expires → Note; **Enter** on Note saves the row once qty, price and expiry are filled (it goes back to the first empty one if not) and puts you back on Qty for the next price. Editing a row works the same way; **Edit** and **Delete** change a row. The entered date is set to today. The expiry date starts at today plus the number of days set in **Settings → Advanced settings** (365 unless changed); clear it for no expiry. A quantity can have only one current price, so to change it edit that row (or let it expire and add a new one). Expired rows stay in gray as history and are skipped by price lookup. Changes save straight to ShopKeeper.
 
 **Price lookup** under the matrix shows contract, matrix, past-job, and proposal prices for this part. It starts with the part's customer; pick another customer to see what they were charged, and enter a quantity to see the matrix price that applies to it.
-4. Click **New part** to create a part. Part number and customer code are required. Rev defaults to `-`. Description defaults to the part number if you leave it blank. After create, the editor opens so you can add operations, a picture, and a cert.
+**Material** is required. Pick it from the list (choose **Unknown** if you are not sure); the list is set in **Settings → Advanced settings**. It saves to the ShopKeeper part and prints in large bold type next to **Rev** on the traveler. An older part whose material is not on the list shows it as "(not on the list)" and can keep it until you pick a listed one. The material also shows in the Parts list and in part matching on a PO.
+4. Click **New part** to create a part. Part number, material, and customer code are required. Rev defaults to `-`. Description defaults to the part number if you leave it blank. After create, the editor opens so you can add operations, a picture, and a cert.
 5. Use **Previous** / **Next** to move 300 parts at a time.
 
 A part number plus revision can only exist once as a Production part. If that pair already exists, the app refuses to create or rename onto it.
@@ -280,6 +281,8 @@ When you pick the customer, each line’s **Cert** box follows that customer’s
   - **Create anyway**, if this really is a new order;
   - **Skip this line**, if the job already exists.
 
+  Jobs made from other lines of the **same PO** don't count, so a PO that lists the same part on several lines creates every line without asking. If the duplicate is only found when you click **Create job and print** (or during **Create all ready jobs**), a popup asks the same question right away. In **Create all ready jobs** you can also **Stop creating**; any other error on a line asks whether to continue with the next line. When it finishes, a message lists the jobs it created and the lines it skipped or could not create, and the page is already up to date.
+
 ---
 
 ## 9. Skipping a line and coming back to it
@@ -314,6 +317,13 @@ Sometimes a line can't be entered yet. For example, the part isn't in ShopKeeper
 The gear next to **+ New PO** opens **Settings**. It is not a tab.
 
 **Color theme** sets the color of the app header, buttons and section headers. Section headers use a softer shade, and text switches between black and white for whichever is easier to read. Pick one of the eight swatches. This browser keeps the choice on this computer.
+
+**Advanced settings** (link at the bottom of Settings):
+
+- **Price matrix:** how many days new prices last. The part editor fills in that expiry date when you add a price; you can still change it on each price. This browser keeps the setting on this computer.
+
+- **Part materials:** the choices in the part editor's Material box. Add a material, move it up or down, or **Hide** it. Hiding takes it off the list for new choices; parts that already use it keep it. Adding a hidden material again shows it again.
+- **Certification templates:** the wording printed on certificates of conformance (ShopKeeper's certification library). Click a template to edit its description or wording, then **Save template**. Changes save straight into ShopKeeper and apply to every part that uses the template, including certificates ShopKeeper itself prints; the count on the right shows how many parts use it. Line breaks and spacing are kept, but changing the wording replaces ShopKeeper's fonts and colours with plain text. **New template** adds one; link it to parts in the part editor. Template names (IDs) cannot be changed after they are created.
 
 ---
 

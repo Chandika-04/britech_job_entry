@@ -282,6 +282,10 @@ def _draw_traveler_job_fields(page: fitz.Page, job, data: PrintDocumentData) -> 
     _put(page, (224, 116), _text(job.part_number), 10, bold=True)
     _put(page, (364, 116), "Rev:", 10)
     _put(page, (394, 116), _text(job.part_revision) or "-", 10, bold=True)
+    # Material sits next to Rev, larger and bold so the floor sees it at a glance.
+    _put(page, (432, 116), "Material:", 10)
+    material = _text(getattr(job, "material", None)) or "-"
+    _put(page, (478, 117), _fit(material, RIGHT - 478, 13, bold=True), 13, bold=True)
     _put(page, (LEFT + 4, 132), "Customer", 10)
     _put(page, (70, 132), _text(job.customer_code), 10, bold=True)
     _put(page, (184, 132), "Desc:", 10)

@@ -1,9 +1,8 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { readPriceExpiryDays, writePriceExpiryDays } from "@/lib/priceDefaults";
 import { cn } from "@/lib/utils";
 import { applyTheme, readStoredThemeHex, THEME_PRESETS } from "@/lib/theme";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
@@ -11,7 +10,6 @@ import { useDocumentTitle } from "@/lib/useDocumentTitle";
 export function SettingsPage() {
   useDocumentTitle(["Settings"]);
   const [selected, setSelected] = useState(() => readStoredThemeHex().toLowerCase());
-  const [expiryDays, setExpiryDays] = useState(() => String(readPriceExpiryDays()));
   const selectedIndex = Math.max(
     0,
     THEME_PRESETS.findIndex((preset) => preset.hex.toLowerCase() === selected),
@@ -96,30 +94,15 @@ export function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Price matrix</CardTitle>
+          <CardTitle>Advanced settings</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <label className="flex flex-wrap items-center gap-2 text-sm">
-            New prices expire after
-            <Input
-              type="number"
-              min={1}
-              max={3650}
-              className="w-24 font-mono"
-              value={expiryDays}
-              onChange={(event) => setExpiryDays(event.target.value)}
-              onBlur={() => {
-                const days = Math.round(Number(expiryDays));
-                const next = Number.isFinite(days) && days >= 1 && days <= 3650 ? days : readPriceExpiryDays();
-                writePriceExpiryDays(next);
-                setExpiryDays(String(next));
-              }}
-            />
-            days
-          </label>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-[13px] text-muted">
-            Fills in the expiry date when you add a price on the part editor. You can still change it on each price.
+            Price matrix expiry, part material choices and certification templates.
           </p>
+          <Link to="/settings/advanced" className="text-sm font-semibold text-accent hover:underline">
+            Open advanced settings →
+          </Link>
         </CardContent>
       </Card>
     </div>

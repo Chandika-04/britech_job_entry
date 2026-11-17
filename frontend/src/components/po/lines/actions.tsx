@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "@/api/client";
+import { createLineJob, useCreateIssueDialog } from "@/components/po/lines/createIssues";
 import { PartMatchSection } from "@/components/po/PartMatch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -138,7 +139,8 @@ export function CreateJobButton({
   className?: string;
 }) {
   const [block, setBlock] = useState<CreatePrintResult | null>(null);
-  if ((line.erp_status === "created" || line.erp_status === "skipped") && !block) return null;
+  const { ask: askIssue, dialog: issueDialog } = useCreateIssueDialog();
+  if ((line.erp_status === "created" || line.erp_status === "skipped") && !block && !issueDialog) return null;
   const canCreate = confirmed && line.erp_status === "ready";
   return (
     <>
@@ -148,18 +150,36 @@ export function CreateJobButton({
         disabled={disabled || !canCreate}
         onClick={() =>
           onRun(line.id, async () => {
-            const result = await createJobThenPrint(po.id, line.id, line.cert_required, onAskPrint);
-            if (result.printed) onNotice?.(`Job ${result.job_number} created.`);
-            else if (result.missing_ops || result.missing_cert) setBlock(result);
-            else if (result.print_error) onNotice?.(`Job created. Print skipped: ${result.print_error}`);
-            else onNotice?.("ShopKeeper job created.");
-            return result.po;
+            const done = await createLineJob(
+              po,
+              line,
+              (lineId) => createJobThenPrint(po.id, lineId, line.cert_required, onAskPrint),
+              askIssue,
+              false,
+            );
+            if (done.outcome === "created") {
+              const result = done.result;
+              if (result.printed) onNotice?.(`Job ${result.job_number} created.`);
+              else if (result.missing_ops || result.missing_cert) setBlock(result);
+              else if (result.print_error) onNotice?.(`Job created. Print skipped: ${result.print_error}`);
+              else onNotice?.("ShopKeeper job created.");
+            } else if (done.outcome === "created_no_reply") {
+              onNotice?.(`Job ${done.jobNumber} was created, but the reply was lost so nothing was printed. Print it from the job page.`);
+            } else if (done.outcome === "skipped") {
+              onNotice?.("Line skipped.");
+            } else if (done.outcome === "failed") {
+              // The line shows its own error once the screen refreshes; otherwise show it here.
+              const saved = done.po.line_items.find((row) => row.id === line.id);
+              if (!saved?.erp_failure_reason) throw new Error(done.message);
+            }
+            return done.po;
           })
         }
       >
         Create job and print
       </Button>
       {block ? <JobPrintBlock block={block} poId={po.id} onClose={() => setBlock(null)} /> : null}
+      {issueDialog}
     </>
   );
 }

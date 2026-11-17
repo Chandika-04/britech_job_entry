@@ -319,7 +319,7 @@ export function JobPage() {
                       aria-label="Certification required"
                     />
                     <span className="ml-auto shrink-0 text-[13px] text-ink">Total</span>
-                    <Input className="w-28 shrink-0 font-mono" value={lineTotal(draft.quantity, draft.unit, draft.unit_price)} readOnly tabIndex={-1} data-enter-skip />
+                    <Input className="pointer-events-none w-28 shrink-0 select-none border-rule-soft bg-head font-mono" value={lineTotal(draft.quantity, draft.unit, draft.unit_price)} readOnly tabIndex={-1} aria-readonly data-enter-skip />
                   </div>
                   <p className="text-xs text-muted">
                     {job.cert_linked ? "Certificate is linked on the part." : "No certificate linked on the part."}{" "}

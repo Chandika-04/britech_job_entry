@@ -115,6 +115,7 @@ def get_job_page(db: Session, job_number: str, provider: ShopKeeperProvider | No
         work_centers=[WorkCenterOut.model_validate(row, from_attributes=True) for row in provider.list_work_centers()],
         templates=[OpTemplateOut.model_validate(row, from_attributes=True) for row in provider.list_op_templates()],
         pictures=[PartPictureOut.model_validate(row, from_attributes=True) for row in (job.pictures or [])],
+        material=job.material,
     )
 
 
@@ -353,6 +354,7 @@ def get_part_editor(pm_linkid: int, provider: ShopKeeperProvider | None = None) 
         quality_hold_note=part.quality_hold_note,
         fa_hold=part.fa_hold,
         ship_hold=part.ship_hold,
+        material=part.material,
         operations=_ops_out(part.operations),
         pictures=[PartPictureOut.model_validate(row, from_attributes=True) for row in part.pictures],
         linked_certs=[CertTextOut.model_validate(row, from_attributes=True) for row in part.linked_certs],
@@ -459,9 +461,12 @@ def list_parts(
     )
 
 
-def create_part(payload: PartHeaderIn, provider: ShopKeeperProvider | None = None) -> PartEditorOut:
+def create_part(
+    payload: PartHeaderIn, provider: ShopKeeperProvider | None = None, *, material: str | None = None
+) -> PartEditorOut:
+    """`material` is the already-checked choice (see materials.resolve_part_material)."""
     provider = provider or get_shopkeeper_provider()
-    header = _part_header(payload, provider)
+    header = _part_header(payload, provider, material)
     pm_linkid = provider.create_part(header)
     return get_part_editor(pm_linkid, provider)
 
@@ -470,14 +475,16 @@ def update_part_header(
     pm_linkid: int,
     payload: PartHeaderIn,
     provider: ShopKeeperProvider | None = None,
+    *,
+    material: str | None = None,
 ) -> PartEditorOut:
     provider = provider or get_shopkeeper_provider()
-    header = _part_header(payload, provider)
+    header = _part_header(payload, provider, material)
     provider.update_part_header(pm_linkid, header)
     return get_part_editor(pm_linkid, provider)
 
 
-def _part_header(payload: PartHeaderIn, provider: ShopKeeperProvider) -> PartHeaderUpdate:
+def _part_header(payload: PartHeaderIn, provider: ShopKeeperProvider, material: str | None = None) -> PartHeaderUpdate:
     number = (payload.part_number or "").strip()
     if not number:
         raise AppError("Part number is required.")
@@ -494,6 +501,7 @@ def _part_header(payload: PartHeaderIn, provider: ShopKeeperProvider) -> PartHea
         part_revision=revision,
         customer_code=customer.customer_number,
         description=description,
+        material=material,
     )
 
 

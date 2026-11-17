@@ -40,7 +40,7 @@ def test_create_and_update_part(client):
     FakeShopKeeper.reset_shared()
     created = client.post(
         "/api/parts",
-        json={"part_number": "NEW-PART-1", "customer_code": "cortec", "description": ""},
+        json={"part_number": "NEW-PART-1", "customer_code": "cortec", "description": "", "material": "304 sst"},
     )
     assert created.status_code == 201
     body = created.json()
@@ -48,11 +48,13 @@ def test_create_and_update_part(client):
     assert body["part_revision"] == "-"
     assert body["customer_code"] == "CORTEC"
     assert body["description"] == "NEW-PART-1"
+    assert body["material"] == "304 SST"  # spelled the way the list has it
     assert body["operations"] == []
     pm_linkid = body["pm_linkid"]
 
     listed = client.get("/api/parts", params={"q": "NEW-PART-1", "search_by": "part"})
     assert listed.json()["items"][0]["pm_linkid"] == pm_linkid
+    assert listed.json()["items"][0]["material"] == "304 SST"
 
     updated = client.put(
         f"/api/parts/{pm_linkid}",
@@ -61,24 +63,47 @@ def test_create_and_update_part(client):
             "part_revision": "A",
             "customer_code": "MDC",
             "description": "Updated desc",
+            "material": "Aluminum",
         },
     )
     assert updated.status_code == 200
     assert updated.json()["part_revision"] == "A"
     assert updated.json()["customer_code"] == "MDC"
     assert updated.json()["description"] == "Updated desc"
+    assert updated.json()["material"] == "Aluminum"
+
+
+def test_part_material_is_required_and_must_be_on_the_list(client):
+    fake = FakeShopKeeper.reset_shared()
+    base = {"part_number": "MAT-1", "customer_code": "CORTEC"}
+    assert client.post("/api/parts", json=base).status_code == 422
+    assert client.post("/api/parts", json={**base, "material": "  "}).status_code == 422
+    off_list = client.post("/api/parts", json={**base, "material": "Titanium"})
+    assert off_list.status_code == 422
+    assert "Advanced settings" in off_list.json()["detail"]
+
+    # A part with older material text that is not on the list can keep it unchanged...
+    legacy = next(row for row in fake.parts if row.pm_linkid == 102)
+    legacy.material = "304 SST MATERIAL"
+    header = {"part_number": "4022.656.2799", "part_revision": "A", "customer_code": "BAYADV"}
+    kept = client.put("/api/parts/102", json={**header, "material": "304 SST MATERIAL"})
+    assert kept.status_code == 200
+    assert kept.json()["material"] == "304 SST MATERIAL"
+    # ...but cannot be cleared or changed to something off the list.
+    assert client.put("/api/parts/102", json=header).status_code == 422
+    assert client.put("/api/parts/102", json={**header, "material": "Brass"}).status_code == 422
 
 
 def test_create_part_rejects_duplicate_and_unknown_customer(client):
     FakeShopKeeper.reset_shared()
     duplicate = client.post(
         "/api/parts",
-        json={"part_number": "MULTI-REV", "part_revision": "A", "customer_code": "CORTEC"},
+        json={"part_number": "MULTI-REV", "part_revision": "A", "customer_code": "CORTEC", "material": "Unknown"},
     )
     assert duplicate.status_code == 409
     missing = client.post(
         "/api/parts",
-        json={"part_number": "BRAND-NEW", "customer_code": "NOPE"},
+        json={"part_number": "BRAND-NEW", "customer_code": "NOPE", "material": "Unknown"},
     )
     assert missing.status_code == 400
     assert "customer" in missing.json()["detail"].lower()

@@ -28,6 +28,13 @@ from app.services.shopkeeper.types import (
 )
 from app.services.units import normalize_unit
 
+
+class DuplicateJobError(AppError):
+    """Create stopped because ShopKeeper already has a job for this customer, PO, and part."""
+
+    def __init__(self, message: str):
+        super().__init__(message, status_code=409)
+
 _LINE_LOCKS: dict[int, threading.Lock] = {}
 _LINE_LOCKS_GUARD = threading.Lock()
 _PO_LOCKS: dict[int, threading.Lock] = {}
@@ -123,6 +130,7 @@ def _candidate_part(row: PartRecord) -> dict:
         "master_type": row.master_type,
         "pm_linkid": row.pm_linkid,
         "inactive": row.inactive,
+        "material": row.material,
     }
 
 
@@ -245,16 +253,26 @@ def suggest_price(
 
 
 def find_duplicates(po: PoRequest, line: PoLineItem, provider: ShopKeeperProvider | None = None) -> list[str]:
+    """ShopKeeper jobs with this line's customer, PO number and part (like ShopKeeper's own save warning).
+
+    Jobs created from other lines of this same PO are not duplicates: customers sometimes list the same
+    part more than once on one PO (releases, different due dates).
+    """
     provider = provider or get_shopkeeper_provider()
     previous = list(line.duplicate_job_numbers or [])
     if not po.po_number or not line.resolved_customer_code or not line.resolved_part_number:
         jobs: list[str] = []
     else:
-        jobs = provider.find_duplicate_jobs(
-            po.po_number.strip(),
-            line.resolved_customer_code,
-            line.resolved_part_number,
-        )
+        own_jobs = {item.erp_job_number for item in po.line_items if item.id != line.id and item.erp_job_number}
+        jobs = [
+            job
+            for job in provider.find_duplicate_jobs(
+                po.po_number.strip(),
+                line.resolved_customer_code,
+                line.resolved_part_number,
+            )
+            if job not in own_jobs
+        ]
     line.duplicate_job_numbers = jobs
     if jobs != previous:
         line.duplicate_acknowledged = False
@@ -575,9 +593,10 @@ def _write_time_checks(
 
     find_duplicates(po, line, provider)
     if line.duplicate_job_numbers and not line.duplicate_acknowledged:
-        raise AppError(
-            "A ShopKeeper job already exists for this customer, PO, and part. Acknowledge before creating another.",
-            status_code=409,
+        jobs = ", ".join(line.duplicate_job_numbers)
+        raise DuplicateJobError(
+            f"ShopKeeper already has job {jobs} for this customer, PO, and part. "
+            "Choose Create anyway or Skip this line."
         )
 
     return customer, part, _positive_int_quantity(line), _unit_price(line)
@@ -611,24 +630,11 @@ def create_job_for_line(
         except AppError:
             raise
 
-        if line.erp_status in {"creating", "failed"}:
-            recovered = provider.find_jobs_by_po_line(po.po_number or "", str(line.line_number or ""))
+        # A previous attempt may have written the job and lost the reply. Only then look for it.
+        if _previous_attempt_may_have_written(db, line):
+            recovered = _try_recover(db, provider, po, line)
             if recovered:
-                line.erp_status = "created"
-                line.erp_job_number = recovered[0]
-                line.erp_failure_reason = None
-                line.erp_database = database_name
-                line.erp_created_at = datetime.now(UTC)
-                _write_audit(
-                    db,
-                    po,
-                    line,
-                    "recover",
-                    "success",
-                    recovered[0],
-                    result={"jobs": recovered},
-                    database_name=database_name,
-                )
+                _mark_recovered(db, po, line, recovered, database_name)
                 return line
 
         line.erp_status = "creating"
@@ -636,6 +642,7 @@ def create_job_for_line(
         _write_audit(db, po, line, "attempt", "started", database_name=database_name)
         db.flush()
 
+        sent = False  # becomes True once the job write is handed to ShopKeeper
         try:
             customer, part, quantity, unit_price = _write_time_checks(po, line, provider)
             settings = get_settings()
@@ -672,6 +679,7 @@ def create_job_for_line(
                 "unit": payload.unit,
                 "cert_required": payload.cert_required,
             }
+            sent = True
             job_number = provider.create_job(payload)
             line.erp_status = "created"
             line.erp_job_number = job_number
@@ -690,35 +698,80 @@ def create_job_for_line(
                 database_name=database_name,
             )
             return line
+        except DuplicateJobError as exc:
+            # Not a failure: the line waits for "Create anyway" or "Skip", like ShopKeeper's save warning.
+            line.erp_status = "pending"
+            refresh_line_status(line, po)
+            _write_audit(
+                db, po, line, "create_job", "blocked", error=exc.message,
+                result={"duplicates": list(line.duplicate_job_numbers or [])}, database_name=database_name,
+            )
+            raise
         except AppError as exc:
-            recovered = _try_recover(provider, po, line)
-            if recovered:
-                _mark_recovered(db, po, line, recovered, database_name)
-                return line
+            if sent:
+                recovered = _try_recover(db, provider, po, line)
+                if recovered:
+                    _mark_recovered(db, po, line, recovered, database_name)
+                    return line
             line.erp_status = "failed"
             line.erp_failure_reason = exc.message
-            _write_audit(db, po, line, "create_job", "failed", error=exc.message, database_name=database_name)
+            _write_audit(
+                db, po, line, "create_job", "failed", error=exc.message, result={"sent": sent}, database_name=database_name
+            )
             raise
         except Exception as exc:
-            recovered = _try_recover(provider, po, line)
-            if recovered:
-                _mark_recovered(db, po, line, recovered, database_name)
-                return line
+            if sent:
+                recovered = _try_recover(db, provider, po, line)
+                if recovered:
+                    _mark_recovered(db, po, line, recovered, database_name)
+                    return line
             line.erp_status = "failed"
             line.erp_failure_reason = str(exc)
-            _write_audit(db, po, line, "create_job", "failed", error=str(exc), database_name=database_name)
+            _write_audit(
+                db, po, line, "create_job", "failed", error=str(exc), result={"sent": sent}, database_name=database_name
+            )
             raise AppError(f"ShopKeeper job create failed: {exc}", status_code=502) from exc
     finally:
         lock.release()
 
 
-def _try_recover(provider: ShopKeeperProvider, po: PoRequest, line: PoLineItem) -> list[str]:
+def _previous_attempt_may_have_written(db: Session, line: PoLineItem) -> bool:
+    """True when an earlier create may have reached ShopKeeper: it was cut off mid-create ("creating"),
+    or its last failure happened after the job write was sent. Failures from checks before the write
+    (credit hold, missing price, duplicate, ...) never wrote anything, so there is nothing to recover."""
+    if line.erp_status == "creating":
+        return True
+    if line.erp_status != "failed":
+        return False
+    last = (
+        db.query(ErpWriteAudit)
+        .filter(ErpWriteAudit.line_item_id == line.id, ErpWriteAudit.action == "create_job")
+        .order_by(ErpWriteAudit.id.desc())
+        .first()
+    )
+    return bool(last and last.status == "failed" and isinstance(last.result_json, dict) and last.result_json.get("sent"))
+
+
+def _try_recover(db: Session, provider: ShopKeeperProvider, po: PoRequest, line: PoLineItem) -> list[str]:
+    """The job this line's own write made: same PO, PO line, customer and part, and not already
+    claimed by another line in this app (e.g. another copy of the same PO)."""
     try:
-        if not po.po_number or line.line_number is None:
+        if not po.po_number or line.line_number is None or not line.resolved_customer_code or not line.resolved_part_number:
             return []
-        return provider.find_jobs_by_po_line(po.po_number, str(line.line_number))
+        found = provider.find_jobs_for_line(
+            po.po_number.strip(), str(line.line_number), line.resolved_customer_code, line.resolved_part_number
+        )
     except Exception:
         return []
+    if not found:
+        return []
+    claimed = {
+        row[0]
+        for row in db.query(PoLineItem.erp_job_number)
+        .filter(PoLineItem.erp_job_number.in_(found), PoLineItem.id != line.id)
+        .all()
+    }
+    return [job for job in found if job not in claimed]
 
 
 def _mark_recovered(

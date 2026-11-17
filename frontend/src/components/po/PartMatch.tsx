@@ -229,7 +229,7 @@ export function PartMatchSection({
                 <th className="w-[22%]">Part #</th>
                 <th className="w-12">Rev</th>
                 <th>Description</th>
-                <th className="w-20">Type</th>
+                <th className="w-24">Material</th>
                 <th className="w-16" />
               </tr>
             </thead>
@@ -255,8 +255,14 @@ export function PartMatchSection({
                   >
                     <td className="font-mono font-semibold">{match.part_number}</td>
                     <td className="font-mono">{match.part_revision}</td>
-                    <td>{match.description || <span className="text-faint">No description</span>}</td>
-                    <td className="text-xs text-muted">{match.master_type || "—"}</td>
+                    <td>
+                      {match.description || <span className="text-faint">No description</span>}
+                      {/* Almost every part is Production; only call out the others. */}
+                      {match.master_type && match.master_type !== "Production" ? (
+                        <span className="ml-1.5 text-[11px] text-muted">({match.master_type})</span>
+                      ) : null}
+                    </td>
+                    <td className="text-xs">{match.material || <span className="text-faint">—</span>}</td>
                     <td className="whitespace-nowrap text-right">
                       <Link
                         to={`/parts/${match.pm_linkid}`}

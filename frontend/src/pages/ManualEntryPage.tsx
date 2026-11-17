@@ -17,6 +17,7 @@ import {
 import { PrintJobDialog } from "@/components/po/PrintJobDialog";
 import { ErpBadge, ReviewBadge, StatusBadge } from "@/components/po/StatusBadge";
 import { ShipperCreatedBanner, WarningsBanner } from "@/components/po/WarningsBanner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,8 +27,9 @@ import { poCustomerCode } from "@/components/po/lines/helpers";
 import { ShipperActions } from "@/components/po/ShipperActions";
 import { useDocumentTitle } from "@/lib/useDocumentTitle";
 import { describeSuggestion, usePriceAutofill } from "@/lib/usePriceAutofill";
-import { cn, focusNextEmpty, formatQty, formatUsd, handleEnterAdvance, todayIso } from "@/lib/utils";
-import type { CustomerCandidate, LineItem, LineItemDraft, PartCandidate, PoDetail, PoDraft } from "@/types/po";
+import { PartImageCard } from "@/components/po/PartImageCard";
+import { cn, focusNextEmpty, formatQty, formatUsd, handleEnterAdvance, lineTotal, todayIso } from "@/lib/utils";
+import type { CustomerCandidate, LineItem, LineItemDraft, PartCandidate, PartPicture, PoDetail, PoDraft } from "@/types/po";
 
 const UNITS = ["Each", "Lot"] as const;
 
@@ -269,6 +271,16 @@ export function ManualEntryPage() {
   const removeLine = (index: number) => {
     if (!draft || draft.line_items.length <= 1) return;
     setDraft({ ...draft, line_items: draft.line_items.filter((_, itemIndex) => itemIndex !== index) });
+    // Picked parts are keyed by line position: move the ones below the removed line up.
+    setPickedParts((current) => {
+      const next: Record<number, PartCandidate> = {};
+      for (const [key, part] of Object.entries(current)) {
+        const at = Number(key);
+        if (at < index) next[at] = part;
+        else if (at > index) next[at - 1] = part;
+      }
+      return next;
+    });
   };
 
   const lineKey = (item: LineItemDraft, index: number) => (item.id != null ? String(item.id) : `new-${index}`);
@@ -422,6 +434,7 @@ export function ManualEntryPage() {
               setDraft((current) => (current ? applyPart(current, index, part) : current));
             }}
             pickedCustomerNumber={pickedCustomer?.customer_number || null}
+            pickedPmLinkId={pickedParts[index]?.pm_linkid ?? null}
             priceNote={priceNotes[lineKey(item, index)]}
             onRun={run}
             onNotice={setNotice}
@@ -462,6 +475,29 @@ export function ManualEntryPage() {
   );
 }
 
+function usePartPictures(pmLinkId: number | null): PartPicture[] {
+  const [pictures, setPictures] = useState<PartPicture[]>([]);
+  useEffect(() => {
+    if (pmLinkId == null) {
+      setPictures([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .getPart(pmLinkId)
+      .then((part) => {
+        if (!cancelled) setPictures(part.pictures ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setPictures([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pmLinkId]);
+  return pictures;
+}
+
 function ManualLineCard({
   po,
   line,
@@ -474,6 +510,7 @@ function ManualLineCard({
   onPickPrice,
   onPickPart,
   pickedCustomerNumber,
+  pickedPmLinkId,
   priceNote,
   onRun,
   onNotice,
@@ -489,10 +526,14 @@ function ManualLineCard({
   onPickPrice: (price: string) => void;
   onPickPart: (part: PartCandidate) => void;
   pickedCustomerNumber: string | null;
+  pickedPmLinkId: number | null;
   priceNote?: string;
   onRun: RunLine;
   onNotice: (message: string) => void;
 }) {
+  // Same picture as the Review page: the part just picked here, else the part stored on the line.
+  const pmLinkId = pickedPmLinkId ?? line?.resolved_pm_linkid ?? null;
+  const pictures = usePartPictures(pmLinkId);
   const locked = line?.erp_status === "creating";
   const created = line?.erp_status === "created";
   const printWaiter = useRef<(() => void) | null>(null);
@@ -529,7 +570,11 @@ function ManualLineCard({
       <CardHeader className="flex items-center justify-between gap-2">
         <CardTitle>Line {item.line_number || index + 1}</CardTitle>
         <div className="flex items-center gap-2">
-          {line ? <ErpBadge status={line.erp_status} /> : null}
+          {line && line.erp_status === "pending" && line.duplicate_job_numbers.length > 0 && !line.duplicate_acknowledged ? (
+            <Badge variant="warning">Possible duplicate</Badge>
+          ) : line ? (
+            <ErpBadge status={line.erp_status} />
+          ) : null}
           <Button type="button" variant="ghost" size="sm" disabled={fieldsOff || created || !canDelete} onClick={onRemove}>
             <Trash2 className="h-3.5 w-3.5" />
             Delete
@@ -537,6 +582,8 @@ function ManualLineCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        <div className={cn(pmLinkId != null && "grid gap-3 md:grid-cols-[minmax(0,1fr)_240px]")}>
+        <div className="min-w-0 space-y-3">
         <PartMatchSection
           initialPartNumber={item.customer_part_number}
           initialRevision={item.revision}
@@ -619,7 +666,17 @@ function ManualLineCard({
             />
             {priceNote ? <p className="text-xs text-accent-text">From {priceNote}</p> : null}
           </Field>
-          <Field label="Due" className="col-span-2">
+          <Field label="Total">
+            <Input
+              className="pointer-events-none select-none border-rule-soft bg-head font-mono"
+              value={lineTotal(item.quantity, item.uom, item.unit_price)}
+              readOnly
+              tabIndex={-1}
+              aria-readonly
+              data-enter-skip
+            />
+          </Field>
+          <Field label="Due">
             <Input
               data-focus={`due-line-${index}`}
               type="date"
@@ -632,6 +689,13 @@ function ManualLineCard({
           <Field label="Notes" className="col-span-2 lg:col-span-4">
             <Textarea value={item.notes} disabled={fieldsOff} onChange={(event) => onUpdate("notes", event.target.value)} />
           </Field>
+        </div>
+        </div>
+        {pmLinkId != null ? (
+          <div className="min-w-0">
+            <PartImageCard pictures={pictures} pmLinkId={pmLinkId} compact />
+          </div>
+        ) : null}
         </div>
 
         {line ? (

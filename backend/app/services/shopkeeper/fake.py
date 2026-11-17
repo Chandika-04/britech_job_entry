@@ -19,6 +19,8 @@ from app.services.shopkeeper.lookup import (
 )
 from app.services.shopkeeper.ops_util import copy_op
 from app.services.shopkeeper.types import (
+    CertTemplate,
+    CertTemplateWrite,
     CertText,
     CustomerRecord,
     JobHeaderUpdate,
@@ -202,7 +204,7 @@ class FakeShopKeeper:
             ),
         ]
         self.parts = [
-            PartRecord("SUB-BEC-12352-0016", "A", "Test housing", "Production", 101, False, "BAYADV"),
+            PartRecord("SUB-BEC-12352-0016", "A", "Test housing", "Production", 101, False, "BAYADV", "316 SST"),
             PartRecord("4022.656.2799", "A", "Machined sleeve", "Production", 102, False, "BAYADV"),
             PartRecord("MULTI-REV", "A", "Rev A widget", "Production", 103, False, "CORTEC"),
             PartRecord("MULTI-REV", "B", "Rev B widget", "Production", 104, False, "CORTEC"),
@@ -343,6 +345,7 @@ class FakeShopKeeper:
             CertText("EP B912-13", "ASTM B912 Electropolish", "<div>Electropolished per ASTM B912.</div>"),
             CertText("PASS A967", "ASTM A967 Passivate", "<div>Passivated per ASTM A967.</div>"),
         ]
+        self.cert_versions: dict[str, int] = {}
         self.templates = [
             OpTemplate(1, "Electropolish", "ASTM B912 Electropolishing", 0, 3),
             OpTemplate(2, "Empty", "Empty template", 99, 0),
@@ -467,9 +470,16 @@ class FakeShopKeeper:
                 return row
         return None
 
-    def find_jobs_by_po_line(self, po_number: str, po_line: str) -> list[str]:
+    def find_jobs_for_line(self, po_number: str, po_line: str, customer_code: str, part_number: str) -> list[str]:
         self.current_database()
-        return [job for po, line, job in self.jobs if po == po_number and line == po_line]
+        return [
+            row.job_number
+            for row in reversed(self.job_records)
+            if row.po_number == po_number
+            and str(row.po_line) == po_line
+            and row.customer_code == customer_code
+            and row.part_number == part_number
+        ]
 
     def find_duplicate_jobs(self, po_number: str, customer_code: str, part_number: str) -> list[str]:
         self.current_database()
@@ -897,6 +907,37 @@ class FakeShopKeeper:
         self.current_database()
         return [CertText(row.id, row.description, None) for row in self.cert_texts]
 
+    def _cert_version(self, ctxt_id: str) -> str:
+        return f"{self.cert_versions.get(ctxt_id, 1):016x}"
+
+    def list_cert_templates(self) -> list[CertTemplate]:
+        self.current_database()
+        counts: dict[str, int] = {}
+        for linked in self.part_certs.values():
+            for ctxt_id in linked:
+                counts[ctxt_id] = counts.get(ctxt_id, 0) + 1
+        return [
+            CertTemplate(row.id, row.description, row.text, self._cert_version(row.id), counts.get(row.id, 0))
+            for row in sorted(self.cert_texts, key=lambda item: item.id)
+        ]
+
+    def create_cert_template(self, row: CertTemplateWrite) -> None:
+        self.current_database()
+        if any(item.id.casefold() == row.id.casefold() for item in self.cert_texts):
+            raise ConflictError(f"A certification template named {row.id} already exists.")
+        self.cert_texts.append(CertText(row.id, row.description, row.html))
+
+    def update_cert_template(self, row: CertTemplateWrite, rowversion: str | None) -> None:
+        self.current_database()
+        current = next((item for item in self.cert_texts if item.id == row.id), None)
+        if current is None:
+            raise AppError("Certification template not found.", status_code=404)
+        if rowversion != self._cert_version(row.id):
+            raise AppError("This template was changed by someone else. Reload and try again.", status_code=409)
+        current.description = row.description
+        current.text = row.html
+        self.cert_versions[row.id] = self.cert_versions.get(row.id, 1) + 1
+
     def get_job_page(self, job_number: str) -> JobPageRecord | None:
         self.current_database()
         detail = self.job_details.get(job_number)
@@ -914,6 +955,8 @@ class FakeShopKeeper:
         detail.traveler_printed = job_number in self.traveler_printed
         detail.shipper_number = self.job_to_ship.get(job_number)
         detail.pictures = list(self.part_pics.get(pm, [])) if pm else []
+        part = next((row for row in self.parts if row.pm_linkid == pm), None) if pm else None
+        detail.material = part.material if part else None
         return detail
 
     def update_job_header(self, job_number: str, payload: JobHeaderUpdate) -> JobPageRecord:
@@ -1071,6 +1114,7 @@ class FakeShopKeeper:
             operations=list(self.part_ops.get(pm_linkid, [])),
             pictures=list(self.part_pics.get(pm_linkid, [])),
             linked_certs=linked,
+            material=part.material,
         )
 
     def _part_list_row(self, part: PartRecord) -> PartMasterListRow:
@@ -1086,6 +1130,7 @@ class FakeShopKeeper:
             operation_count=len(self.part_ops.get(part.pm_linkid, [])),
             picture_count=len(self.part_pics.get(part.pm_linkid, [])),
             cert_linked=bool(self.part_certs.get(part.pm_linkid)),
+            material=part.material,
         )
 
     def _find_production_part(self, part_number: str, part_revision: str, exclude_id: int | None = None) -> PartRecord | None:
@@ -1137,6 +1182,7 @@ class FakeShopKeeper:
                 pm_linkid,
                 False,
                 payload.customer_code,
+                payload.material,
             )
         )
         return pm_linkid
@@ -1154,6 +1200,7 @@ class FakeShopKeeper:
         part.part_revision = payload.part_revision
         part.customer_code = payload.customer_code
         part.description = payload.description
+        part.material = payload.material
 
     def save_part_operations(self, pm_linkid: int, operations: list[OperationRow]) -> list[OperationRow]:
         self.current_database()

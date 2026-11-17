@@ -136,7 +136,7 @@ Do not store image blobs in SQLite / `BritechJobEntry`.
 | `CertificationTypeList` | Trace types (heat treat #, material trace). Not part COC text. |
 | `JobCertifications` | Rare scanned files on a job (`Jct_Filename` UNC). **Not** how we link COC wording. Out of scope for v1 print unless examples show otherwise. |
 
-**Link a cert in the part editor:** INSERT `CertificationItems` (`CItm_PMLinkID`, `CItm_LinkID` = chosen `CTxt_ID`, `CItm_OrderNum`). Unlink: DELETE that items row. Do not rewrite `CertificationText` in v1 (pick from the 41 existing texts).
+**Link a cert in the part editor:** INSERT `CertificationItems` (`CItm_PMLinkID`, `CItm_LinkID` = chosen `CTxt_ID`, `CItm_OrderNum`). Unlink: DELETE that items row. Templates themselves are edited only in **Settings → Advanced settings** (UPDATE `CTxt_Description` / `CTxt_Text` with a `SSMA_TimeStamp` check, or INSERT a new `CTxt_ID`). Unchanged wording keeps its original HTML; changed wording is saved as plain `<div>` lines. IDs are never renamed or deleted (parts link to them).
 
 **Has certification** for print: cert required is false, **or** `CertificationItems` has a row for this `Pm_LinkID`.
 
@@ -243,7 +243,7 @@ Template replace / part-`OpMaster` rewrite: one transaction; no mixed old/new st
 
 Picture copy failure: do not insert `PartMasterPics`. Print failure: leave `Jr_TravelerPrinted` unchanged.
 
-Never write `OpMasterMasters` / `OpMasterMasterOps`. INSERT `PartMaster` only from the Parts tab create (unique `(Pm_PartNum, Pm_PartRev, Pm_MasterType)`; rev default `-`; `Pm_LeadTime = 0`). Never rewrite `CertificationText` in v1.
+Never write `OpMasterMasters` / `OpMasterMasterOps`. INSERT `PartMaster` only from the Parts tab create (unique `(Pm_PartNum, Pm_PartRev, Pm_MasterType)`; rev default `-`; `Pm_LeadTime = 0`; `Pm_MaterialNote` = the required material from the app's `part_material_option` list). `CertificationText` is written only from Advanced settings (see Certification above).
 
 ---
 

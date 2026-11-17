@@ -58,6 +58,7 @@ class PartRecord:
     pm_linkid: int
     inactive: bool
     customer_code: str | None = None
+    material: str | None = None  # Pm_MaterialNote
 
 
 @dataclass
@@ -72,6 +73,7 @@ class PartMasterListRow:
     operation_count: int
     picture_count: int
     cert_linked: bool
+    material: str | None = None
 
 
 @dataclass
@@ -80,6 +82,7 @@ class PartHeaderUpdate:
     part_revision: str
     customer_code: str
     description: str | None
+    material: str | None = None  # written to Pm_MaterialNote
 
 
 @dataclass
@@ -281,6 +284,24 @@ class CertText:
 
 
 @dataclass
+class CertTemplate:
+    """A CertificationText row as the advanced settings editor sees it."""
+
+    id: str
+    description: str | None
+    text: str | None  # stored HTML
+    rowversion: str | None
+    part_count: int = 0  # parts linked through CertificationItems
+
+
+@dataclass
+class CertTemplateWrite:
+    id: str
+    description: str | None
+    html: str | None
+
+
+@dataclass
 class PartPicture:
     id: int
     path: str
@@ -304,6 +325,7 @@ class PartEditorRecord:
     operations: list[OperationRow]
     pictures: list[PartPicture]
     linked_certs: list[CertText]
+    material: str | None = None
 
 
 @dataclass
@@ -331,6 +353,7 @@ class JobPageRecord:
     order_date: date | None = None
     notes: str | None = None
     pictures: list[PartPicture] | None = None
+    material: str | None = None  # from the part (Pm_MaterialNote)
 
 
 @dataclass

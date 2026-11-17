@@ -112,6 +112,7 @@ class JobPageOut(BaseModel):
     work_centers: list[WorkCenterOut] = Field(default_factory=list)
     templates: list[OpTemplateOut] = Field(default_factory=list)
     pictures: list[PartPictureOut] = Field(default_factory=list)
+    material: str | None = None
 
 
 class PriceMatrixRowOut(BaseModel):
@@ -144,6 +145,7 @@ class PartEditorOut(BaseModel):
     quality_hold_note: str | None = None
     fa_hold: bool = False
     ship_hold: bool = False
+    material: str | None = None
     operations: list[OperationOut] = Field(default_factory=list)
     pictures: list[PartPictureOut] = Field(default_factory=list)
     linked_certs: list[CertTextOut] = Field(default_factory=list)
@@ -158,6 +160,7 @@ class PartHeaderIn(BaseModel):
     part_revision: str | None = Field(default=None, max_length=5)
     customer_code: str = Field(min_length=1, max_length=15)
     description: str | None = Field(default=None, max_length=75)
+    material: str | None = Field(default=None, max_length=200)
 
 
 class PartListRowOut(BaseModel):
@@ -171,6 +174,7 @@ class PartListRowOut(BaseModel):
     operation_count: int = 0
     picture_count: int = 0
     cert_linked: bool = False
+    material: str | None = None
 
 
 class PartListResponse(BaseModel):

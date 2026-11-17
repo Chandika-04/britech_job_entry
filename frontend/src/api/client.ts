@@ -1,10 +1,12 @@
 import type {
+  CertTemplate,
   CreatePrintResult,
   CustomerLookupResponse,
   CustomerSuggestion,
   DirectPrintResult,
   JobHeaderPayload,
   JobPage,
+  MaterialOption,
   PartEditor,
   PartHeaderPayload,
   PartListResponse,
@@ -320,6 +322,49 @@ export const api = {
   },
   getPart(pmLinkId: number | string) {
     return request<PartEditor>(`/api/parts/${pmLinkId}`);
+  },
+  listMaterials(includeHidden = false) {
+    return request<MaterialOption[]>(`/api/settings/materials${includeHidden ? "?include_hidden=true" : ""}`);
+  },
+  addMaterial(name: string) {
+    return request<MaterialOption[]>(`/api/settings/materials`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+  },
+  setMaterialActive(id: number, active: boolean) {
+    return request<MaterialOption[]>(`/api/settings/materials/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active }),
+    });
+  },
+  reorderMaterials(ids: number[]) {
+    return request<MaterialOption[]>(`/api/settings/materials/order`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+  },
+  listCertTemplates() {
+    return request<CertTemplate[]>(`/api/settings/cert-templates`);
+  },
+  createCertTemplate(payload: { id: string; description: string | null; text: string }) {
+    return request<CertTemplate[]>(`/api/settings/cert-templates`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+  updateCertTemplate(id: string, payload: { description: string | null; text: string; rowversion: string | null }) {
+    // IDs can contain spaces or "/", so encode each path segment.
+    const path = id.split("/").map(encodeURIComponent).join("/");
+    return request<CertTemplate[]>(`/api/settings/cert-templates/${path}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
   },
   savePartHeader(pmLinkId: number | string, payload: PartHeaderPayload) {
     return request<PartEditor>(`/api/parts/${pmLinkId}`, {

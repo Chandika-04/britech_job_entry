@@ -33,6 +33,7 @@ class PartCandidate(BaseModel):
     master_type: str | None = None
     pm_linkid: int
     inactive: bool = False
+    material: str | None = None
 
 
 class CustomerLookupResponse(BaseModel):

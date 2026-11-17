@@ -578,10 +578,11 @@ function MiniJob({
       </JobField>
       <JobField label="Total">
         <input
-          className="cell-input h-8 border-rule text-right font-mono"
+          className="cell-input pointer-events-none h-8 select-none border-rule-soft bg-head text-right font-mono"
           value={lineTotal(item.quantity, item.uom, item.unit_price)}
           readOnly
           tabIndex={-1}
+          aria-readonly
           aria-label="Total"
         />
       </JobField>

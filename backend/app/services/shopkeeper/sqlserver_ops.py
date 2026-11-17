@@ -7,6 +7,8 @@ from app.exceptions import AppError, ConflictError
 from app.services.shopkeeper.lookup import normalize_part_search_by, ready_term
 from app.services.shopkeeper.ops_util import rowversion_bytes, rowversion_hex
 from app.services.shopkeeper.types import (
+    CertTemplate,
+    CertTemplateWrite,
     CertText,
     JobHeaderUpdate,
     JobPageRecord,
@@ -231,6 +233,78 @@ class SqlServerOpsMixin:
         finally:
             conn.close()
 
+    def list_cert_templates(self) -> list[CertTemplate]:
+        conn, _ = self._connect()
+        try:
+            rows = conn.cursor().execute(
+                """
+                SELECT t.CTxt_ID, t.CTxt_Description, t.CTxt_Text, t.SSMA_TimeStamp,
+                       (SELECT COUNT(*) FROM dbo.CertificationItems i WHERE i.CItm_LinkID = t.CTxt_ID)
+                FROM dbo.CertificationText t
+                ORDER BY t.CTxt_ID
+                """
+            ).fetchall()
+            return [
+                CertTemplate(str(row[0]).strip(), row[1], row[2], rowversion_hex(row[3]), int(row[4] or 0))
+                for row in rows
+            ]
+        finally:
+            conn.close()
+
+    def create_cert_template(self, row: CertTemplateWrite) -> None:
+        conn, _ = self._connect()
+        try:
+            cur = conn.cursor()
+            if cur.execute("SELECT 1 FROM dbo.CertificationText WHERE CTxt_ID = ?", row.id).fetchone():
+                raise ConflictError(f"A certification template named {row.id} already exists.")
+            cur.execute(
+                """
+                INSERT INTO dbo.CertificationText (CTxt_ID, CTxt_Description, CTxt_Text, CTxt_DontPrintOnGeneric, CTxt_SortOrderOnGeneric)
+                VALUES (?, ?, ?, 1, 0)
+                """,
+                row.id,
+                row.description,
+                row.html,
+            )
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            if _is_unique_conflict(exc):
+                raise ConflictError(f"A certification template named {row.id} already exists.") from exc
+            raise
+        finally:
+            conn.close()
+
+    def update_cert_template(self, row: CertTemplateWrite, rowversion: str | None) -> None:
+        conn, _ = self._connect()
+        try:
+            cur = conn.cursor()
+            current = cur.execute("SELECT SSMA_TimeStamp FROM dbo.CertificationText WHERE CTxt_ID = ?", row.id).fetchone()
+            if not current:
+                raise AppError("Certification template not found.", status_code=404)
+            expected = rowversion_bytes(rowversion)
+            if expected is None or bytes(current[0]) != expected:
+                raise AppError("This template was changed by someone else. Reload and try again.", status_code=409)
+            cur.execute(
+                """
+                UPDATE dbo.CertificationText
+                SET CTxt_Description = ?, CTxt_Text = ?
+                WHERE CTxt_ID = ? AND SSMA_TimeStamp = ?
+                """,
+                row.description,
+                row.html,
+                row.id,
+                expected,
+            )
+            if cur.rowcount != 1:
+                raise AppError("This template was changed by someone else. Reload and try again.", status_code=409)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
     def get_job_page(self, job_number: str) -> JobPageRecord | None:
         conn, _ = self._connect()
         try:
@@ -257,6 +331,7 @@ class SqlServerOpsMixin:
             pm_linkid = _resolve_part_link_id(cur, row[7], str(row[5] or ""), str(row[6] or ""))
             cert_linked = False
             quality_hold = _as_bool(row[17])
+            material: str | None = None
             pics: list[PartPicture] = []
             if pm_linkid is not None:
                 cert_linked = bool(
@@ -266,11 +341,12 @@ class SqlServerOpsMixin:
                     ).fetchone()
                 )
                 hold = cur.execute(
-                    "SELECT COALESCE(Pm_QualityHold, 0) FROM dbo.PartMaster WHERE Pm_LinkID = ?",
+                    "SELECT COALESCE(Pm_QualityHold, 0), Pm_MaterialNote FROM dbo.PartMaster WHERE Pm_LinkID = ?",
                     pm_linkid,
                 ).fetchone()
                 if hold:
                     quality_hold = _as_bool(hold[0])
+                    material = _as_optional_str(hold[1])
                 pics = _part_pictures(cur, pm_linkid)
             ops = [_row_to_op(item) for item in cur.execute(OP_SELECT, job_number).fetchall()]
             due = row[12]
@@ -303,6 +379,7 @@ class SqlServerOpsMixin:
                 order_date=ordered,
                 notes=row[19],
                 pictures=pics,
+                material=material,
             )
         finally:
             conn.close()
@@ -655,7 +732,7 @@ class SqlServerOpsMixin:
                 """
                 SELECT Pm_LinkID, Pm_PartNum, Pm_PartRev, Pm_PartDesc, Pm_CustCode,
                        COALESCE(Pm_Locked, 0), COALESCE(Pm_QualityHold, 0), Pm_QualityHoldNote,
-                       COALESCE(Pm_FAHold, 0), COALESCE(Pm_ShipHold, 0)
+                       COALESCE(Pm_FAHold, 0), COALESCE(Pm_ShipHold, 0), Pm_MaterialNote
                 FROM dbo.PartMaster
                 WHERE Pm_LinkID = ?
                 """,
@@ -703,6 +780,7 @@ class SqlServerOpsMixin:
                 operations=ops,
                 pictures=pics,
                 linked_certs=certs,
+                material=_as_optional_str(row[10]),
             )
         finally:
             conn.close()
@@ -749,7 +827,8 @@ class SqlServerOpsMixin:
                     (SELECT COUNT(*) FROM dbo.PartMasterPics pic WHERE pic.Pmp_PmLinkID = p.Pm_LinkID),
                     CASE WHEN EXISTS (
                         SELECT 1 FROM dbo.CertificationItems ci WHERE ci.CItm_PMLinkID = p.Pm_LinkID
-                    ) THEN 1 ELSE 0 END
+                    ) THEN 1 ELSE 0 END,
+                    p.Pm_MaterialNote
                 FROM dbo.PartMaster p
                 WHERE COALESCE(p.Pm_MasterType, N'Production') = N'Production'
                 {search_sql}
@@ -772,6 +851,7 @@ class SqlServerOpsMixin:
                     operation_count=int(row[7] or 0),
                     picture_count=int(row[8] or 0),
                     cert_linked=_as_bool(row[9]),
+                    material=_as_optional_str(row[10]),
                 )
                 for row in cur.fetchall()
             ]
@@ -790,16 +870,17 @@ class SqlServerOpsMixin:
                 INSERT INTO dbo.PartMaster (
                     Pm_PartNum, Pm_PartRev, Pm_MasterType, Pm_CustCode, Pm_PartDesc,
                     Pm_LeadTime, Pm_InActive, Pm_Locked, Pm_QualityHold, Pm_FAHold, Pm_ShipHold,
-                    Pm_CreationDate
+                    Pm_CreationDate, Pm_MaterialNote
                 )
                 OUTPUT INSERTED.Pm_LinkID
-                VALUES (?, ?, N'Production', ?, ?, 0, 0, 0, 0, 0, 0, ?)
+                VALUES (?, ?, N'Production', ?, ?, 0, 0, 0, 0, 0, 0, ?, ?)
                 """,
                 payload.part_number,
                 payload.part_revision,
                 payload.customer_code,
                 payload.description,
                 datetime.now(),
+                payload.material,
             )
             row = cur.fetchone()
             if not row or row[0] is None:
@@ -829,13 +910,14 @@ class SqlServerOpsMixin:
             cur.execute(
                 """
                 UPDATE dbo.PartMaster
-                SET Pm_PartNum = ?, Pm_PartRev = ?, Pm_CustCode = ?, Pm_PartDesc = ?
+                SET Pm_PartNum = ?, Pm_PartRev = ?, Pm_CustCode = ?, Pm_PartDesc = ?, Pm_MaterialNote = ?
                 WHERE Pm_LinkID = ? AND SSMA_TimeStamp = ?
                 """,
                 payload.part_number,
                 payload.part_revision,
                 payload.customer_code,
                 payload.description,
+                payload.material,
                 pm_linkid,
                 ts,
             )

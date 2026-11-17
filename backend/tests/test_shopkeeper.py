@@ -241,7 +241,7 @@ def test_created_line_rejects_second_create(db, settings):
 def test_crash_after_commit_recovers_existing_job(db, settings):
     fake = FakeShopKeeper.reset_shared()
     po, line = _ready_line(db, settings, fake=fake)
-    fake.jobs.append((po.po_number, "1", "200099"))
+    _shopkeeper_has_job(fake, "200099", po.po_number, "1", line.resolved_customer_code, line.resolved_part_number)
     line.erp_status = "creating"
     db.add(line)
     db.commit()
@@ -249,8 +249,83 @@ def test_crash_after_commit_recovers_existing_job(db, settings):
     db.commit()
     assert line.erp_status == "created"
     assert line.erp_job_number == "200099"
-    assert [job for *_, job in fake.jobs] == ["200099"]
+    assert fake.jobs == []  # nothing new was written
     assert db.query(ErpWriteAudit).filter_by(action="recover").count() == 1
+
+
+def _shopkeeper_has_job(fake, job_number, po_number, po_line, customer, part):
+    from app.services.shopkeeper.types import ShopKeeperJobRow
+
+    fake.job_records.append(
+        ShopKeeperJobRow(
+            job_number=job_number, po_number=po_number, po_line=po_line, customer_code=customer,
+            customer_name=None, part_number=part, part_revision="A", description=None, quantity=1,
+            status="", order_date=date.today(), cert_required=False, shipper_number=None,
+        )
+    )
+
+
+def test_failed_check_never_borrows_another_customers_job(db, settings):
+    """Customers can reuse PO numbers. A create stopped by a check must not adopt another customer's job."""
+    fake = FakeShopKeeper.reset_shared()
+    po, line = _ready_line(db, settings, customer="HOLDCO", fake=fake)  # credit hold, not acknowledged
+    _shopkeeper_has_job(fake, "200077", po.po_number, "1", "BAYADV", line.resolved_part_number)
+    with pytest.raises(AppError, match="credit hold"):
+        create_job_for_line(db, po, line, fake)
+    assert line.erp_status != "created" and line.erp_job_number is None
+    # Trying again after the failed check still does not adopt it.
+    with pytest.raises(AppError, match="credit hold"):
+        create_job_for_line(db, po, line, fake)
+    assert line.erp_job_number is None
+
+
+def test_second_copy_of_a_po_warns_instead_of_taking_the_first_copys_job(db, settings):
+    fake = FakeShopKeeper.reset_shared()
+    po_a, line_a = _ready_line(db, settings, fake=fake)
+    po_b, line_b = _ready_line(db, settings, fake=fake)
+    assert line_b.erp_status == "ready"  # no job existed yet when copy B was checked
+    create_job_for_line(db, po_a, line_a, fake)
+    db.commit()
+    with pytest.raises(AppError, match="Create anyway"):
+        create_job_for_line(db, po_b, line_b, fake)
+    assert line_b.erp_job_number is None
+    assert line_b.duplicate_job_numbers == [line_a.erp_job_number]
+    assert line_b.erp_status == "pending"  # waiting for Create anyway / Skip, not "failed"
+    assert line_b.erp_failure_reason is None
+    db.commit()
+    acknowledge_duplicate(line_b, po_b, True)
+    db.commit()
+    create_job_for_line(db, po_b, line_b, fake)
+    assert line_b.erp_job_number not in {None, line_a.erp_job_number}
+
+
+def test_recovery_ignores_a_job_another_app_line_already_owns(db, settings):
+    fake = FakeShopKeeper.reset_shared()
+    po_a, line_a = _ready_line(db, settings, fake=fake)
+    create_job_for_line(db, po_a, line_a, fake)
+    db.commit()
+    po_b, line_b = _ready_line(db, settings, fake=fake)
+    acknowledge_duplicate(line_b, po_b, True)
+    line_b.erp_status = "creating"  # as if copy B's create was cut off
+    db.commit()
+    create_job_for_line(db, po_b, line_b, fake)
+    assert line_b.erp_job_number not in {None, line_a.erp_job_number}  # wrote its own job
+
+
+def test_same_part_twice_on_one_po_is_not_a_duplicate(db, settings):
+    fake = FakeShopKeeper.reset_shared()
+    po, _ = _ready_line(db, settings, customer="CORTEC", fake=fake)
+    for line in po.line_items:
+        if not line.resolved_part_number:
+            resolve_part(db, po, line, "SUB-BEC-12352-0016", "A", fake)
+    db.commit()
+    db.refresh(po)
+    first, second = po.line_items[0], po.line_items[1]
+    create_job_for_line(db, po, first, fake)
+    db.commit()
+    create_job_for_line(db, po, second, fake)
+    assert second.duplicate_job_numbers == []
+    assert second.erp_job_number not in {None, first.erp_job_number}
 
 
 def test_fail_after_commit_recovers_on_same_request(db, settings):
