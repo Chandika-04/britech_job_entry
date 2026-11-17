@@ -37,7 +37,7 @@ def list_options(db: Session, *, include_hidden: bool = False) -> list[PartMater
     _ensure_seeded(db)
     stmt = select(PartMaterialOption).order_by(PartMaterialOption.sort_order, PartMaterialOption.id)
     if not include_hidden:
-        stmt = stmt.where(PartMaterialOption.active.is_(True))
+        stmt = stmt.where(PartMaterialOption.active == True)
     return list(db.scalars(stmt))
 
 
